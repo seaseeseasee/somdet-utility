@@ -1,0 +1,14 @@
+# ฐานข้อมูลสำหรับพัฒนาบนเครื่อง (ไม่ใช่การตั้งค่า Production)
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mu_owner
+      POSTGRES_PASSWORD: dev_owner_password_change_me
+      POSTGRES_DB: mu_utility
+    ports:
+      - "5432:5432"
+    volumes:
+      - mu_pgdata:/var/lib/postgresql/data
+volumes:
+  mu_pgdata:
