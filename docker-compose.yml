@@ -1,4 +1,6 @@
-# ฐานข้อมูลสำหรับพัฒนาบนเครื่อง (ไม่ใช่การตั้งค่า Production)
+# รันทั้งระบบเป็น container (ไม่ใช่การตั้งค่า Production)
+# พอร์ตบนเครื่อง map ไปเลขสูงเพื่อไม่ชนกับโปรเจคอื่น — เปลี่ยนได้ผ่าน .env ที่ราก (WEB_PORT, API_PORT, DB_PORT)
+name: mu-utility
 services:
   db:
     image: postgres:16
@@ -7,8 +9,54 @@ services:
       POSTGRES_PASSWORD: dev_owner_password_change_me
       POSTGRES_DB: mu_utility
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-15432}:5432"
     volumes:
       - mu_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mu_owner -d mu_utility"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build: { context: ., dockerfile: Dockerfile.api }
+    command: ["npx", "tsx", "scripts/migrate.ts"]
+    environment: &dbenv
+      DATABASE_ADMIN_URL: postgres://mu_owner:dev_owner_password_change_me@db:5432/mu_utility
+      DB_APP_PASSWORD: dev_app_password_change_me
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+
+  # ข้อมูลตัวอย่าง (DEMO): docker compose --profile seed run --rm seed
+  seed:
+    profiles: ["seed"]
+    build: { context: ., dockerfile: Dockerfile.api }
+    command: ["npx", "tsx", "scripts/seed-dev.ts"]
+    environment: *dbenv
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  api:
+    build: { context: ., dockerfile: Dockerfile.api }
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: postgres://mu_app:dev_app_password_change_me@db:5432/mu_utility
+      AUTH_MODE: dev
+      COOKIE_SECURE: "false"
+    ports:
+      - "${API_PORT:-13000}:3000"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    build: { context: ., dockerfile: Dockerfile.web }
+    ports:
+      - "${WEB_PORT:-18080}:80"
+    depends_on:
+      - api
+
 volumes:
   mu_pgdata:
