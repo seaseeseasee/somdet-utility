@@ -233,9 +233,10 @@ describe('สูตรคำนวณผ่าน API', () => {
     expect(r.statusCode).toBe(422);
     expect(r.json().problems[0]).toMatch(/ไม่มีรายได้ตรง/);
   });
-  it('ชุดสูตรที่อนุมัติคือ v1.0', async () => {
+  it('ชุดสูตรที่อนุมัติคือ v1.1 (D-16)', async () => {
     const r = (await S.aExec!.get('/api/formula-sets/current')).json();
-    expect(r.version).toBe('1.0');
+    expect(r.version).toBe('1.1');
+    expect(r.definition.paybackDivisor).toBe('min_age_data_years');
     expect(r.definition.weights.utilization).toBe(0.25);
   });
 });

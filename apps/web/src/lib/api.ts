@@ -68,3 +68,27 @@ export interface Cycle {
   id: string; hospital_id: string; hospital_name: string; fiscal_year_be: number; opens_at: string; closes_at: string; status: string;
   period: { from: string; to: string }; planFiscalYear: number; summary: Record<string, number>;
 }
+
+export interface FactorScores { utilization: number; clinical: number; financial: number; reliability: number; satisfaction: number; strategic: number }
+export interface Breakdown {
+  formulaVersion: string; ageYears: number; paybackDivisorYears: number; costPerCase: number | null; paybackYears: number | null;
+  scores: FactorScores; weighted: FactorScores; utilityScore: number; recommendation: string; recommendationText: string; warning: boolean; explanation: string[];
+}
+export interface ScoreRow {
+  equipment: { id: string; code: string; name: string; hospitalId: string; hospitalName: string; department: string; type: string; purchaseYear: number; purchasePrice: number; status: string };
+  status: 'scored' | 'no_data' | 'incomplete'; dataYears: number[]; rank: number | null;
+  utilityScore?: number; scores?: FactorScores; paybackYears?: number | null; costPerCase?: number | null;
+  recommendation?: string; recommendationText?: string; warning?: boolean; utilizationPct?: number; problems?: string[];
+}
+export interface ScoreList {
+  year: number; window: { from: number; to: number }; formula: { version: string };
+  summary: { total: number; scored: number; notScored: number; average: number | null; high: number; good: number; medium: number; low: number; warning: number };
+  rows: ScoreRow[];
+}
+export interface ScoreDetail {
+  year: number; window: { from: number; to: number }; formula: { version: string };
+  outcome: { status: 'scored'; breakdown: Breakdown; inputs: Record<string, number | boolean>; years: number[] } | { status: 'no_data' | 'incomplete'; problems: string[]; years: number[] };
+  rank: number | null; rankOf: number;
+  annual: { fiscalYear: number; status: string; confirmed: boolean; metrics: { maintenanceCost: number; utilizationPctHours: number | null; downtimePct: number | null } | null; revenue: number | null; caseCount: number | null; annualScore: number | null }[];
+  history: { analysis_year: number; utility_score: number; recommendation: string; warning: boolean; rank: number | null; computed_at: string; formula_version: string }[];
+}

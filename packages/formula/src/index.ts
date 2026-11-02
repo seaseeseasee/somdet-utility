@@ -21,6 +21,12 @@ export interface FormulaSet {
   };
   /** ตัวคูณบทลงโทษ Payback (สมมติฐาน!B10) */
   paybackPenalty: number;
+  /**
+   * ตัวหารรายได้เฉลี่ยต่อปีของ Payback
+   * - excel_age: อายุตามสูตร Excel (v1.0)
+   * - min_age_data_years: MIN(อายุตามสูตร Excel, จำนวนปีที่มีข้อมูล) (v1.1, D-16)
+   */
+  paybackDivisor: 'excel_age' | 'min_age_data_years';
   /** Financial Score เมื่อไม่มีรายได้ตรง (IFERROR(...,50)) — ใช้เฉพาะกรณีระบุว่าไม่มีรายได้ตรง (D-05) */
   noRevenueFinancialScore: number;
   /** ตัวคูณแปลงคะแนน 1–5 เป็น 0–100 */
@@ -42,11 +48,25 @@ export const FORMULA_SET_V1: Readonly<FormulaSet> = Object.freeze({
     strategic: 0.1,
   }),
   paybackPenalty: 15,
+  paybackDivisor: 'excel_age',
   noRevenueFinancialScore: 50,
   ratingMultiplier: 20,
   thresholds: Object.freeze({ high: 80, good: 60, medium: 40 }),
   warning: Object.freeze({ utilizationBelow: 40, scoreBelow: 50 }),
 }) as FormulaSet;
+
+/**
+ * ชุดสูตร v1.1 (อนุมัติ 2 พ.ย. 2569, D-16): เหมือน v1.0 ทุกประการ ยกเว้นตัวหาร Payback
+ * = MIN(อายุตามสูตร Excel, จำนวนปีที่มีข้อมูล) เพื่อไม่ให้เครื่องอายุเกิน 5 ปีได้ Payback สูงเกินจริง
+ * เมื่อมีข้อมูลครบทุกปีตั้งแต่ซื้อ ผลเท่ากับ v1.0 (Excel)
+ */
+export const FORMULA_SET_V1_1: Readonly<FormulaSet> = Object.freeze({
+  ...FORMULA_SET_V1,
+  version: '1.1',
+  paybackDivisor: 'min_age_data_years',
+}) as FormulaSet;
+
+export const FORMULA_SETS: Record<string, Readonly<FormulaSet>> = { '1.0': FORMULA_SET_V1, '1.1': FORMULA_SET_V1_1 };
 
 export type RecommendationLevel = 'high' | 'good' | 'medium' | 'low';
 
@@ -83,6 +103,8 @@ export interface CumulativeInput {
   strategicRating: number;
   /** ใช้แทนสูตรอายุ E เฉพาะการคำนวณ Score รายปี */
   ageYearsOverride?: number;
+  /** จำนวนปีงบที่มีข้อมูลซึ่งรวมเป็นค่าสะสม (ใช้กับชุดสูตร v1.1) */
+  dataYears?: number;
 }
 
 export interface FactorScores {
@@ -98,6 +120,8 @@ export interface ScoreBreakdown {
   formulaVersion: string;
   /** E: ปีที่ใช้งานแล้ว */
   ageYears: number;
+  /** ตัวหารรายได้ที่ใช้คำนวณ Payback จริง */
+  paybackDivisorYears: number;
   /** N: ต้นทุนต่อเคส (null = "N/A") */
   costPerCase: number | null;
   /** O: Payback Period (null = "N/A" เพราะไม่มีรายได้ตรง) */
@@ -178,7 +202,11 @@ export function computeScore(input: CumulativeInput, fs: FormulaSet = FORMULA_SE
   // N = IFERROR((D + H) / G, "N/A")
   const costPerCase = input.cases > 0 ? (input.purchasePrice + input.maintenanceCost) / input.cases : null;
   // O = IFERROR(D / (J / E), "N/A")
-  const paybackYears = input.revenue > 0 ? input.purchasePrice / (input.revenue / ageYears) : null;
+  const divisor =
+    fs.paybackDivisor === 'min_age_data_years' && input.dataYears && input.dataYears > 0
+      ? Math.min(ageYears, input.dataYears)
+      : ageYears;
+  const paybackYears = input.revenue > 0 ? input.purchasePrice / (input.revenue / divisor) : null;
   // Q = IFERROR(MIN(100, MAX(0, 100 − O × B10)), 50)
   const financial =
     paybackYears === null
@@ -222,7 +250,7 @@ export function computeScore(input: CumulativeInput, fs: FormulaSet = FORMULA_SE
       : `ต้นทุนต่อเคส = (${fmt(input.purchasePrice)} + ${fmt(input.maintenanceCost)}) ÷ ${fmt(input.cases, 0)} = ${fmt(costPerCase)} บาท`,
     paybackYears === null
       ? `Payback = N/A (ไม่มีรายได้ตรง) → Financial Score = ${fs.noRevenueFinancialScore}`
-      : `Payback = ${fmt(input.purchasePrice)} ÷ (${fmt(input.revenue)} ÷ ${ageYears}) = ${fmt(paybackYears)} ปี → Financial = MIN(100, MAX(0, 100 − ${fmt(paybackYears)} × ${fs.paybackPenalty})) = ${fmt(financial)}`,
+      : `Payback = ${fmt(input.purchasePrice)} ÷ (${fmt(input.revenue)} ÷ ${divisor}${divisor !== ageYears ? ` [MIN(อายุ ${ageYears}, ข้อมูล ${input.dataYears} ปี)]` : ''}) = ${fmt(paybackYears)} ปี → Financial = MIN(100, MAX(0, 100 − ${fmt(paybackYears)} × ${fs.paybackPenalty})) = ${fmt(financial)}`,
     `Utilization Score = ${fmt(scores.utilization)} × ${w.utilization} = ${fmt(weighted.utilization)}`,
     `Clinical Score = ${input.clinicalRating} × ${fs.ratingMultiplier} = ${fmt(scores.clinical)} × ${w.clinical} = ${fmt(weighted.clinical)}`,
     `Financial Score = ${fmt(scores.financial)} × ${w.financial} = ${fmt(weighted.financial)}`,
@@ -235,6 +263,7 @@ export function computeScore(input: CumulativeInput, fs: FormulaSet = FORMULA_SE
   return {
     formulaVersion: fs.version,
     ageYears,
+    paybackDivisorYears: divisor,
     costPerCase,
     paybackYears,
     scores,
@@ -395,6 +424,7 @@ export function aggregateYears(
     clinicalRating: latest.clinicalRating,
     satisfactionRating: latest.satisfactionRating,
     strategicRating: latest.strategicRating,
+    dataYears: ys.length,
   };
 }
 

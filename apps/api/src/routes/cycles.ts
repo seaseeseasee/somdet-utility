@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { evaluate, fiscalRange, fiscalYearOf, rowToBody } from '../annual.js';
 import { requirePerm } from '../auth.js';
 import { writeAudit } from '../audit.js';
+import { currentFormulaSet, scoreAll } from '../scoring.js';
 import { withTx, type Db } from '../db.js';
 import { HttpError } from '../errors.js';
 import type { AppDeps } from '../app.js';
@@ -185,9 +186,25 @@ export async function cycleRoutes(app: FastifyInstance, { pool }: AppDeps) {
       for (const r of locked.rows)
         await db.query("INSERT INTO review_action (hospital_id, annual_record_id, action, reason, actor_id) VALUES ($1,$2,'lock','ปิดรอบประเมิน',$3)", [c.hospital_id, r.id, u.id]);
       await db.query("UPDATE assessment_cycle SET status = 'closed', closed_at = now() WHERE id = $1", [id]);
+      // เก็บผลประเมิน ณ วันปิดรอบ (ประวัติการประเมิน) พร้อม snapshot ข้อมูลที่ใช้และเวอร์ชันสูตร
+      const f = await currentFormulaSet(db);
+      const ids = (await db.query('SELECT equipment_id FROM assessment_task WHERE cycle_id = $1', [id])).rows.map((r) => r.equipment_id);
+      let snapshots = 0;
+      for (const r of await scoreAll(db, c.fiscal_year_be, f.fs, { hospitalId: c.hospital_id })) {
+        if (r.outcome.status !== 'scored' || !ids.includes(r.equipment.id)) continue;
+        const b = r.outcome.breakdown;
+        await db.query(
+          `INSERT INTO score_result (hospital_id, equipment_id, formula_set_id, basis, period_from, period_to, inputs_snapshot, breakdown,
+             utility_score, recommendation, warning, cycle_id, analysis_year, rank)
+           VALUES ($1,$2,$3,'cumulative',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          [c.hospital_id, r.equipment.id, f.id, r.outcome.years[0], c.fiscal_year_be, { ...r.outcome.inputs, years: r.outcome.years }, b,
+           b.utilityScore, b.recommendation, b.warning, id, c.fiscal_year_be, r.rank],
+        );
+        snapshots++;
+      }
       const s = summary(await tasksOf(db, id));
-      await writeAudit(db, { hospitalId: c.hospital_id, actorId: u.id, action: 'close', entity: 'assessment_cycle', entityId: id, after: { locked: locked.rowCount, summary: s }, ip: req.ip });
-      return { locked: locked.rowCount, notApproved: s.total! - s.approved!, summary: s };
+      await writeAudit(db, { hospitalId: c.hospital_id, actorId: u.id, action: 'close', entity: 'assessment_cycle', entityId: id, after: { locked: locked.rowCount, scoreSnapshots: snapshots, formula: f.version, summary: s }, ip: req.ip });
+      return { locked: locked.rowCount, notApproved: s.total! - s.approved!, scoreSnapshots: snapshots, summary: s };
     });
   });
 

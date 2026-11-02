@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, type Equipment, type YearList } from '../lib/api';
+import { api, type Equipment, type ScoreDetail, type YearList } from '../lib/api';
+import { f1, f2, RecChip, ScoreBadge } from '../lib/score';
+import { Breakdown } from './Scores';
 import { useAuth } from '../lib/auth';
 import { ageYears, baht, MAINT_PLAN, STATUS, thDate } from '../lib/format';
 
@@ -27,11 +29,13 @@ export function EquipmentDetail() {
   const [hist, setHist] = useState<HistoryRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [years, setYears] = useState<YearList | null>(null);
+  const [score, setScore] = useState<ScoreDetail | null>(null);
 
   useEffect(() => {
     api.get<Equipment>(`/api/equipment/${id}`).then(setE, (x: Error) => setErr(x.message));
     api.get<HistoryRow[]>(`/api/equipment/${id}/history`).then(setHist, () => undefined);
     api.get<YearList>(`/api/equipment/${id}/annual`).then(setYears, () => undefined);
+    api.get<ScoreDetail>(`/api/equipment/${id}/score`).then(setScore, () => undefined);
   }, [id]);
 
   if (err) return <div className="note red">{err}</div>;
@@ -87,7 +91,44 @@ export function EquipmentDetail() {
               </tbody>
             </table></div>
           </div>
-          <div className="note blue">Utility Score และกราฟย้อนหลัง 5 ปีจะแสดงที่หน้านี้ใน Sprint 4–5</div>
+          {score && (
+            <div className="card stack">
+              <div className="hrow between"><h3>Utility Score ปีงบ {score.year}</h3><span className="badge-v">ชุดสูตร v{score.formula.version} · ข้อมูลปีงบ {score.window.from}–{score.window.to}</span></div>
+              <Breakdown equipmentId={e.id} year={score.year} />
+            </div>
+          )}
+          {score && score.annual.length > 0 && (
+            <div className="card flush">
+              <div style={{ padding: '16px 20px 6px' }}><h3>แนวโน้มรายปี</h3><div className="sub">Score รายปีใช้ข้อมูลปีเดียวเพื่อดูแนวโน้ม (D-02) · คำนวณเฉพาะปีที่ยืนยันแล้ว · กราฟจะเพิ่มใน Sprint 5</div></div>
+              <div className="tbl-wrap"><table className="tbl">
+                <thead><tr><th>ปีงบ</th><th className="r">Utilization</th><th className="r">Downtime</th><th className="r">ค่าบำรุงรักษา</th><th className="r">รายได้</th><th className="r">เคส</th><th className="c">Score รายปี</th></tr></thead>
+                <tbody>
+                  {score.annual.map((a) => (
+                    <tr key={a.fiscalYear}>
+                      <td className="num">{a.fiscalYear} {!a.confirmed && <span className="muted">(ยังไม่ยืนยัน)</span>}</td>
+                      <td className="r num">{a.metrics?.utilizationPctHours != null ? `${f1(a.metrics.utilizationPctHours)}%` : '—'}</td>
+                      <td className="r num">{a.metrics?.downtimePct != null ? `${f1(a.metrics.downtimePct)}%` : '—'}</td>
+                      <td className="r num">{a.metrics ? baht(a.metrics.maintenanceCost) : '—'}</td>
+                      <td className="r num">{baht(a.revenue)}</td>
+                      <td className="r num">{baht(a.caseCount)}</td>
+                      <td className="c">{a.annualScore !== null ? <ScoreBadge v={a.annualScore} /> : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table></div>
+            </div>
+          )}
+          {score && score.history.length > 0 && (
+            <div className="card">
+              <h3>ประวัติการประเมิน (บันทึกเมื่อปิดรอบ)</h3>
+              <table className="tbl"><thead><tr><th>ปีงบ</th><th className="c">Score</th><th>ข้อเสนอแนะ</th><th className="c">อันดับ</th><th>ชุดสูตร</th></tr></thead>
+                <tbody>{score.history.map((h) => (
+                  <tr key={h.computed_at}><td className="num">{h.analysis_year}</td><td className="c"><ScoreBadge v={h.utility_score} /></td>
+                    <td><RecChip level={h.recommendation} text={({ high: 'ซื้อเพิ่ม/อัปเกรดรุ่นใหม่', good: 'คงสภาพ ติดตามต่อเนื่อง', medium: 'ทบทวนแผนการใช้งาน', low: 'พิจารณาทดแทน' } as Record<string, string>)[h.recommendation]} /></td>
+                    <td className="c num">{h.rank ?? '—'}</td><td>v{h.formula_version}</td></tr>
+                ))}</tbody></table>
+            </div>
+          )}
         </div>
         <div className="card stack">
           <h3>ประวัติการแก้ไข</h3>

@@ -12,6 +12,7 @@ import { cycleRoutes } from './routes/cycles.js';
 import { equipmentRoutes } from './routes/equipment.js';
 import { formulaRoutes } from './routes/formula.js';
 import { orgRoutes } from './routes/org.js';
+import { scoreRoutes } from './routes/scores.js';
 
 export interface AppDeps {
   pool: pg.Pool;
@@ -41,5 +42,6 @@ export async function buildApp(deps: AppDeps) {
   await formulaRoutes(app, deps);
   await annualRoutes(app, deps);
   await cycleRoutes(app, deps);
+  await scoreRoutes(app, deps);
   return app;
 }

@@ -13,12 +13,12 @@ const NAV: [string, Item[]][] = [
     { to: '/review', label: 'รอตรวจสอบ / ยืนยัน', perm: 'equipment.read' },
   ]],
   ['วิเคราะห์', [
-    { to: '/scores', label: 'ผลวิเคราะห์ Utility Score', soon: 'S4' },
+    { to: '/scores', label: 'ผลวิเคราะห์ Utility Score', perm: 'dashboard.view' },
     { to: '/reports', label: 'รายงานผู้บริหาร', soon: 'S6' },
   ]],
   ['ระบบ', [{ to: '/users', label: 'ผู้ใช้งานและสิทธิ์', perm: 'users.manage' }]],
 ];
-const TITLES: Record<string, string> = { equipment: 'ทะเบียนครุภัณฑ์', users: 'ผู้ใช้งานและสิทธิ์', due: 'รายการครบกำหนดประเมิน', review: 'รอตรวจสอบ / ยืนยัน' };
+const TITLES: Record<string, string> = { equipment: 'ทะเบียนครุภัณฑ์', users: 'ผู้ใช้งานและสิทธิ์', due: 'รายการครบกำหนดประเมิน', review: 'รอตรวจสอบ / ยืนยัน', scores: 'ผลการวิเคราะห์ Utility Score' };
 
 export function Layout() {
   const { me, logout, can } = useAuth();
@@ -54,7 +54,7 @@ export function Layout() {
           })}
         </nav>
         <div className="foot">
-          ชุดสูตร: <b>v1.0 (อนุมัติแล้ว)</b>
+          ชุดสูตร: <b>v1.1 (อนุมัติแล้ว)</b>
         </div>
       </aside>
       <div className="main">

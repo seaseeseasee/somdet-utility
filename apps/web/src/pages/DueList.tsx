@@ -29,13 +29,17 @@ export function DueList() {
     setSuggested(r.suggestedFiscalYear);
     setCycleId((cur) => cur || r.cycles.find((c) => c.status === 'open')?.id || r.cycles[0]?.id || '');
   }, []);
-  const loadTasks = useCallback(async () => {
-    if (!cycleId) return setData(null);
-    setData(await api.get(`/api/cycles/${cycleId}/tasks${mine ? '?mine=1' : ''}`));
-  }, [cycleId, mine]);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => { void loadCycles(); if (admin) api.get<Option[]>('/api/assignees').then(setPeople); }, [loadCycles, admin]);
-  useEffect(() => { void loadTasks(); }, [loadTasks]);
+  // โหลดรายการใหม่เมื่อเปลี่ยนรอบ/ตัวกรอง หรือหลังดำเนินการ และไม่ใช้ผลของคำขอเก่าที่ตอบกลับช้ากว่า
+  useEffect(() => {
+    let stale = false;
+    if (!cycleId) { setData(null); return; }
+    api.get<{ cycle: Cycle; summary: Record<string, number>; tasks: TaskRow[] }>(`/api/cycles/${cycleId}/tasks${mine ? '?mine=1' : ''}`)
+      .then((d) => { if (!stale) setData(d); });
+    return () => { stale = true; };
+  }, [cycleId, mine, tick]);
 
   const run = async (fn: () => Promise<unknown>, ok: string) => {
     setMsg(null);
@@ -43,7 +47,7 @@ export function DueList() {
       const r = await fn();
       setMsg({ tone: 'blue', text: typeof r === 'string' ? r : ok });
       await loadCycles();
-      await loadTasks();
+      setTick((t) => t + 1);
     }
     catch (e) { setMsg({ tone: 'red', text: e instanceof ApiError ? e.message : 'ดำเนินการไม่สำเร็จ' }); }
   };

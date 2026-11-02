@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { computeScore, FORMULA_SET_V1, IncompleteDataError } from '@mu/formula';
+import { computeScore, IncompleteDataError } from '@mu/formula';
+import { currentFormulaSet } from '../scoring.js';
 import { z } from 'zod';
 import { requirePerm, requireUser } from '../auth.js';
 import { verifyAudit } from '../audit.js';
@@ -14,21 +15,22 @@ export async function formulaRoutes(app: FastifyInstance, { pool }: AppDeps) {
     const row = await withTx(pool, u.scope, async (db) =>
       (await db.query("SELECT version, definition, status, approved_at FROM formula_set WHERE status = 'approved' ORDER BY approved_at DESC LIMIT 1")).rows[0],
     );
-    return { ...row, engineVersion: FORMULA_SET_V1.version };
+    return row;
   });
 
   /** คำนวณตัวอย่างจากค่าที่ส่งมา (ไม่บันทึก) — ใช้แสดง "ที่มาของคะแนน" ระหว่างกรอก */
   app.post('/api/formula/preview', async (req, reply) => {
-    requireUser(req);
     const b = z
       .object({
         purchaseYear: Num, purchasePrice: Num, analysisYear: Num, utilizationPct: Num, cases: Num, maintenanceCost: Num,
         downtimePct: Num, revenue: Num, noDirectRevenue: z.boolean().default(false),
-        clinicalRating: Num, satisfactionRating: Num, strategicRating: Num,
+        clinicalRating: Num, satisfactionRating: Num, strategicRating: Num, dataYears: Num.optional(),
       })
       .parse(req.body);
+    const u = requireUser(req);
+    const f = await withTx(pool, u.scope, (db) => currentFormulaSet(db));
     try {
-      return computeScore(b);
+      return computeScore(b, f.fs);
     } catch (e) {
       if (e instanceof IncompleteDataError) return reply.code(422).send({ error: 'ข้อมูลไม่ครบ ยังคำนวณไม่ได้', problems: e.problems });
       throw e;
