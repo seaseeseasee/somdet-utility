@@ -92,3 +92,24 @@ export interface ScoreDetail {
   annual: { fiscalYear: number; status: string; confirmed: boolean; metrics: { maintenanceCost: number; utilizationPctHours: number | null; downtimePct: number | null } | null; revenue: number | null; caseCount: number | null; annualScore: number | null }[];
   history: { analysis_year: number; utility_score: number; recommendation: string; warning: boolean; rank: number | null; computed_at: string; formula_version: string }[];
 }
+
+export interface YearPoint { fiscalYear: number; utilizationPct: number | null; downtimePct: number | null; maintenanceCost: number | null; revenue: number | null }
+export interface HospitalDashboard {
+  year: number; window: { from: number; to: number }; formula: { version: string };
+  kpis: { equipment: number; totalValue: number; scored: number; averageScore: number | null; high: number; replace: number; warning: number; maintenanceTotal: number };
+  totals: (YearPoint & { records: number })[];
+  equipment: { id: string; code: string; name: string; hospitalName: string; department: string; purchasePrice: number; rank: number | null; status: string;
+    utilityScore: number | null; recommendation: string | null; recommendationText: string | null; warning: boolean; scores: FactorScores | null; series: YearPoint[] }[];
+}
+export interface NetworkDashboard {
+  year: number; window: { from: number; to: number }; formula: { version: string };
+  types: Option[]; completenessGroups: string[]; provinces: string[];
+  kpis: { hospitals: number; hospitalsReporting: number; equipment: number; totalValue: number; confirmedPct: number; confirmedThisYear: number; averageScore: number | null; scored: number; replace: number };
+  hospitals: {
+    hospital: { id: string; hcode: string; name: string; province: string | null }; equipment: number; totalValue: number; confirmedThisYear: number;
+    cycle: { status: string; closesAt: string } | null; progress: { approved: number; submitted: number; inProgress: number; notStarted: number; total: number };
+    averageScore: number | null; scoredCount: number; distribution: { high: number; good: number; medium: number; low: number }; notScored: number;
+    types: Record<string, number>; completeness: Record<string, number>; coverage: { fiscalYear: number; pct: number | null }[];
+    followUps: { level: 'red' | 'warn'; text: string }[];
+  }[];
+}

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api, type Equipment, type ScoreDetail, type YearList } from '../lib/api';
 import { f1, f2, RecChip, ScoreBadge } from '../lib/score';
 import { Breakdown } from './Scores';
+import { TrendCharts } from './TrendCharts';
 import { useAuth } from '../lib/auth';
 import { ageYears, baht, MAINT_PLAN, STATUS, thDate } from '../lib/format';
 
@@ -97,9 +98,10 @@ export function EquipmentDetail() {
               <Breakdown equipmentId={e.id} year={score.year} />
             </div>
           )}
+          {score && score.annual.some((x) => x.confirmed) && <TrendCharts s={score} />}
           {score && score.annual.length > 0 && (
             <div className="card flush">
-              <div style={{ padding: '16px 20px 6px' }}><h3>แนวโน้มรายปี</h3><div className="sub">Score รายปีใช้ข้อมูลปีเดียวเพื่อดูแนวโน้ม (D-02) · คำนวณเฉพาะปีที่ยืนยันแล้ว · กราฟจะเพิ่มใน Sprint 5</div></div>
+              <div style={{ padding: '16px 20px 6px' }}><h3>แนวโน้มรายปี</h3><div className="sub">Score รายปีใช้ข้อมูลปีเดียวเพื่อดูแนวโน้ม (D-02) · คำนวณเฉพาะปีที่ยืนยันแล้ว</div></div>
               <div className="tbl-wrap"><table className="tbl">
                 <thead><tr><th>ปีงบ</th><th className="r">Utilization</th><th className="r">Downtime</th><th className="r">ค่าบำรุงรักษา</th><th className="r">รายได้</th><th className="r">เคส</th><th className="c">Score รายปี</th></tr></thead>
                 <tbody>

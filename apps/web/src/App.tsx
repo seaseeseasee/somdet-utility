@@ -2,10 +2,12 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './Layout';
 import { AuthProvider, useAuth } from './lib/auth';
 import { AnnualForm } from './pages/AnnualForm';
+import { Dashboard } from './pages/Dashboard';
 import { DueList } from './pages/DueList';
 import { EquipmentDetail } from './pages/EquipmentDetail';
 import { EquipmentForm } from './pages/EquipmentForm';
 import { Login } from './pages/Login';
+import { Network } from './pages/Network';
 import { Placeholder } from './pages/Placeholder';
 import { Registry } from './pages/Registry';
 import { ReviewQueue } from './pages/ReviewQueue';
@@ -19,15 +21,15 @@ function Guarded() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Navigate to="/equipment" replace />} />
+        <Route index element={<Navigate to={me.scope === 'all' ? '/network' : '/dashboard'} replace />} />
         <Route path="equipment" element={<Registry />} />
         <Route path="equipment/new" element={<EquipmentForm />} />
         <Route path="equipment/:id" element={<EquipmentDetail />} />
         <Route path="equipment/:id/edit" element={<EquipmentForm />} />
         <Route path="equipment/:id/annual/:year" element={<AnnualForm />} />
         <Route path="users" element={<Users />} />
-        <Route path="network" element={<Placeholder title="Dashboard ภาพรวมเครือข่าย" sprint={5} mockup="00-network-dashboard.png" />} />
-        <Route path="dashboard" element={<Placeholder title="Dashboard โรงพยาบาล" sprint={5} mockup="02-dashboard.png" />} />
+        <Route path="network" element={me.scope === 'all' ? <Network /> : <Navigate to="/dashboard" replace />} />
+        <Route path="dashboard" element={<Dashboard />} />
         <Route path="due" element={<DueList />} />
         <Route path="review" element={<ReviewQueue />} />
         <Route path="scores" element={<Scores />} />

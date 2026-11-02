@@ -4,8 +4,8 @@ import { useAuth } from './lib/auth';
 type Item = { to: string; label: string; perm?: string; soon?: string; central?: boolean };
 const NAV: [string, Item[]][] = [
   ['ภาพรวม', [
-    { to: '/network', label: 'ภาพรวมเครือข่าย', central: true, soon: 'S5' },
-    { to: '/dashboard', label: 'Dashboard โรงพยาบาล', soon: 'S5' },
+    { to: '/network', label: 'ภาพรวมเครือข่าย', central: true },
+    { to: '/dashboard', label: 'Dashboard โรงพยาบาล', perm: 'dashboard.view' },
   ]],
   ['ครุภัณฑ์', [
     { to: '/due', label: 'ครบกำหนดประเมิน', perm: 'equipment.read' },
@@ -18,7 +18,7 @@ const NAV: [string, Item[]][] = [
   ]],
   ['ระบบ', [{ to: '/users', label: 'ผู้ใช้งานและสิทธิ์', perm: 'users.manage' }]],
 ];
-const TITLES: Record<string, string> = { equipment: 'ทะเบียนครุภัณฑ์', users: 'ผู้ใช้งานและสิทธิ์', due: 'รายการครบกำหนดประเมิน', review: 'รอตรวจสอบ / ยืนยัน', scores: 'ผลการวิเคราะห์ Utility Score' };
+const TITLES: Record<string, string> = { equipment: 'ทะเบียนครุภัณฑ์', users: 'ผู้ใช้งานและสิทธิ์', due: 'รายการครบกำหนดประเมิน', review: 'รอตรวจสอบ / ยืนยัน', scores: 'ผลการวิเคราะห์ Utility Score', dashboard: 'Dashboard โรงพยาบาล', network: 'Dashboard ภาพรวมเครือข่าย' };
 
 export function Layout() {
   const { me, logout, can } = useAuth();
