@@ -13,6 +13,7 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { equipmentRoutes } from './routes/equipment.js';
 import { formulaRoutes } from './routes/formula.js';
 import { orgRoutes } from './routes/org.js';
+import { reportRoutes } from './routes/reports.js';
 import { scoreRoutes } from './routes/scores.js';
 
 export interface AppDeps {
@@ -45,5 +46,6 @@ export async function buildApp(deps: AppDeps) {
   await cycleRoutes(app, deps);
   await scoreRoutes(app, deps);
   await dashboardRoutes(app, deps);
+  await reportRoutes(app, deps);
   return app;
 }

@@ -14,11 +14,11 @@ const NAV: [string, Item[]][] = [
   ]],
   ['วิเคราะห์', [
     { to: '/scores', label: 'ผลวิเคราะห์ Utility Score', perm: 'dashboard.view' },
-    { to: '/reports', label: 'รายงานผู้บริหาร', soon: 'S6' },
+    { to: '/reports', label: 'รายงานผู้บริหาร', perm: 'report.export' },
   ]],
   ['ระบบ', [{ to: '/users', label: 'ผู้ใช้งานและสิทธิ์', perm: 'users.manage' }]],
 ];
-const TITLES: Record<string, string> = { equipment: 'ทะเบียนครุภัณฑ์', users: 'ผู้ใช้งานและสิทธิ์', due: 'รายการครบกำหนดประเมิน', review: 'รอตรวจสอบ / ยืนยัน', scores: 'ผลการวิเคราะห์ Utility Score', dashboard: 'Dashboard โรงพยาบาล', network: 'Dashboard ภาพรวมเครือข่าย' };
+const TITLES: Record<string, string> = { equipment: 'ทะเบียนครุภัณฑ์', users: 'ผู้ใช้งานและสิทธิ์', due: 'รายการครบกำหนดประเมิน', review: 'รอตรวจสอบ / ยืนยัน', scores: 'ผลการวิเคราะห์ Utility Score', dashboard: 'Dashboard โรงพยาบาล', network: 'Dashboard ภาพรวมเครือข่าย', reports: 'รายงานสำหรับผู้บริหาร' };
 
 export function Layout() {
   const { me, logout, can } = useAuth();

@@ -3,7 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "description": "Medical Equipment Utility Analysis — ระบบวิเคราะห์ความคุ้มค่าครุภัณฑ์ทางการแพทย์",
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "build": "npm run build -w @mu/formula && npm run build -w @mu/api && npm run build -w @mu/web",
     "test": "npm run test -w @mu/formula && npm run test -w @mu/api",
@@ -13,5 +16,10 @@
     "db:migrate": "npm run migrate -w @mu/api",
     "db:seed": "npm run seed -w @mu/api"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  },
+  "overrides": {
+    "uuid": "11.1.1"
+  }
 }
