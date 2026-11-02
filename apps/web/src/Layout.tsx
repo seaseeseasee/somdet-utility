@@ -8,10 +8,9 @@ const NAV: [string, Item[]][] = [
     { to: '/dashboard', label: 'Dashboard โรงพยาบาล', soon: 'S5' },
   ]],
   ['ครุภัณฑ์', [
-    { to: '/due', label: 'ครบกำหนดประเมิน', soon: 'S3' },
+    { to: '/due', label: 'ครบกำหนดประเมิน', perm: 'equipment.read' },
     { to: '/equipment', label: 'ทะเบียนครุภัณฑ์', perm: 'equipment.read' },
-    { to: '/annual', label: 'บันทึกข้อมูลรายปี', soon: 'S3' },
-    { to: '/review', label: 'รอตรวจสอบ / ยืนยัน', soon: 'S3' },
+    { to: '/review', label: 'รอตรวจสอบ / ยืนยัน', perm: 'equipment.read' },
   ]],
   ['วิเคราะห์', [
     { to: '/scores', label: 'ผลวิเคราะห์ Utility Score', soon: 'S4' },
@@ -19,7 +18,7 @@ const NAV: [string, Item[]][] = [
   ]],
   ['ระบบ', [{ to: '/users', label: 'ผู้ใช้งานและสิทธิ์', perm: 'users.manage' }]],
 ];
-const TITLES: Record<string, string> = { equipment: 'ทะเบียนครุภัณฑ์', users: 'ผู้ใช้งานและสิทธิ์' };
+const TITLES: Record<string, string> = { equipment: 'ทะเบียนครุภัณฑ์', users: 'ผู้ใช้งานและสิทธิ์', due: 'รายการครบกำหนดประเมิน', review: 'รอตรวจสอบ / ยืนยัน' };
 
 export function Layout() {
   const { me, logout, can } = useAuth();
@@ -62,7 +61,7 @@ export function Layout() {
         <header className="top">
           <div>
             <div className="crumb">ระบบวิเคราะห์ความคุ้มค่าครุภัณฑ์</div>
-            <h1>{TITLES[section] ?? ''}</h1>
+            <h1>{loc.pathname.includes('/annual/') ? 'บันทึกข้อมูลรายปี' : (TITLES[section] ?? '')}</h1>
           </div>
           <div className="sp" />
           <span className="pill hosp">{me.hospital?.name ?? 'ทุกโรงพยาบาล (ส่วนกลาง)'}</span>

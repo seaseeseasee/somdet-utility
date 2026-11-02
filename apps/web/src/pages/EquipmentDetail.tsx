@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, type Equipment } from '../lib/api';
+import { api, type Equipment, type YearList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ageYears, baht, MAINT_PLAN, STATUS, thDate } from '../lib/format';
 
@@ -26,10 +26,12 @@ export function EquipmentDetail() {
   const [e, setE] = useState<Equipment | null>(null);
   const [hist, setHist] = useState<HistoryRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [years, setYears] = useState<YearList | null>(null);
 
   useEffect(() => {
     api.get<Equipment>(`/api/equipment/${id}`).then(setE, (x: Error) => setErr(x.message));
     api.get<HistoryRow[]>(`/api/equipment/${id}/history`).then(setHist, () => undefined);
+    api.get<YearList>(`/api/equipment/${id}/annual`).then(setYears, () => undefined);
   }, [id]);
 
   if (err) return <div className="note red">{err}</div>;
@@ -68,7 +70,24 @@ export function EquipmentDetail() {
               {rows.map(([k, v]) => <tr key={k}><td className="muted" style={{ width: 200 }}>{k}</td><td>{v}</td></tr>)}
             </tbody></table>
           </div>
-          <div className="note blue">ข้อมูลการใช้งานรายปี, Utility Score และกราฟย้อนหลัง 5 ปี จะแสดงที่หน้านี้เมื่อพัฒนา Sprint 3–5 เสร็จ</div>
+          <div className="card flush">
+            <div style={{ padding: '16px 20px 6px' }}><h3>ข้อมูลรายปี (ปีงบประมาณ)</h3><div className="sub">แต่ละปีบันทึกแยกกัน แก้ปีหนึ่งไม่กระทบปีอื่น</div></div>
+            <div className="tbl-wrap"><table className="tbl">
+              <thead><tr><th>ปีงบประมาณ</th><th>สถานะ</th><th className="r">ครบถ้วน</th><th>แก้ไขล่าสุด</th><th></th></tr></thead>
+              <tbody>
+                {(years?.years ?? []).slice().reverse().map((y) => (
+                  <tr key={y.fiscalYear}>
+                    <td className="num">{y.fiscalYear}{y.fiscalYear === years?.currentFiscalYear && <span className="muted"> (ปีปัจจุบัน)</span>}</td>
+                    <td><span className={`chip ${{ draft: 'b', submitted: 'w', approved: 'g', locked: 'n' }[y.status ?? ''] ?? 'n'}`}>{y.statusLabel}</span></td>
+                    <td className="r num">{y.recordId ? `${y.completeness}%` : '—'}</td>
+                    <td className="muted">{thDate(y.updatedAt, true)}</td>
+                    <td><Link className="btn sm" to={`/equipment/${e.id}/annual/${y.fiscalYear}`}>{y.recordId ? 'เปิด' : can('annual.write') ? 'บันทึก' : 'ดู'}</Link></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table></div>
+          </div>
+          <div className="note blue">Utility Score และกราฟย้อนหลัง 5 ปีจะแสดงที่หน้านี้ใน Sprint 4–5</div>
         </div>
         <div className="card stack">
           <h3>ประวัติการแก้ไข</h3>

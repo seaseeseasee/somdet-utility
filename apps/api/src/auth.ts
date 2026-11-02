@@ -28,6 +28,7 @@ export const PERMISSIONS = {
   'annual.write': ['hospital_admin', 'data_entry'],
   'annual.review': ['hospital_admin', 'reviewer'],
   'annual.unlock': ['hospital_admin'],
+  'cycle.manage': ['hospital_admin'],
   'users.manage': ['central_admin', 'hospital_admin'],
   'hospital.manage': ['central_admin'],
   'department.manage': ['central_admin', 'hospital_admin'],
