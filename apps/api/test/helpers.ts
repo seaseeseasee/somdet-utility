@@ -9,7 +9,7 @@ import { seedDemo } from '../scripts/seed-dev.js';
  * สร้างฐานข้อมูลทดสอบใหม่ทุกครั้ง: TEST_PG_ADMIN_URL ต้องเป็นบัญชีที่สร้าง database ได้
  * ค่าเริ่มต้นตรงกับ Postgres ทดสอบบนเครื่อง (port 5433)
  */
-export async function setupTestEnv(overrides: Record<string, string> = {}) {
+export async function setupTestEnv(overrides: Record<string, string> = {}, seedOpts: { annual?: boolean } = {}) {
   const base = process.env.TEST_PG_ADMIN_URL ?? 'postgres://mu_owner@127.0.0.1:5433/postgres';
   const dbName = `mu_test_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
   const root = new pg.Client({ connectionString: base });
@@ -19,7 +19,7 @@ export async function setupTestEnv(overrides: Record<string, string> = {}) {
   const adminUrl = base.replace(/\/[^/]*$/, `/${dbName}`);
   const appPassword = 'test_app_pw';
   await migrate(adminUrl, appPassword, () => undefined);
-  const seed = await seedDemo(adminUrl, () => undefined);
+  const seed = await seedDemo(adminUrl, () => undefined, seedOpts);
   const u = new URL(adminUrl);
   u.username = 'mu_app';
   u.password = appPassword;

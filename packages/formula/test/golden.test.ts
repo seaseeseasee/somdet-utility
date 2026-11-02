@@ -11,6 +11,7 @@ import {
   computeAnnualScore,
   computeScore,
   FORMULA_SET_V1,
+  FORMULA_SET_V1_1,
   IncompleteDataError,
   rankScores,
   recommendationOf,
@@ -178,5 +179,40 @@ describe('D-02: รวมข้อมูลรายปีเป็นข้อ�
   });
   it('ไม่มีข้อมูลรายปี → ไม่คำนวณ', () => {
     expect(() => aggregateYears([], { purchaseYear: 2565, purchasePrice: 1 }, 2569)).toThrow(IncompleteDataError);
+  });
+});
+
+describe('ชุดสูตร v1.1 (D-16): ตัวหาร Payback = MIN(อายุตาม Excel, จำนวนปีที่มีข้อมูล)', () => {
+  it('ข้อมูลครบทุกปีตั้งแต่ซื้อ → ผลเท่ากับ Excel ทุกแถว', () => {
+    for (const [name, row, e] of CASES) {
+      const i = toInput(row);
+      // ซื้อปี C วิเคราะห์ปี 2569 → มีข้อมูลปีงบ C..2569 = (2569 − C + 1) ปี ≥ อายุตาม Excel
+      const r = computeScore({ ...i, dataYears: 2569 - i.purchaseYear + 1 }, FORMULA_SET_V1_1);
+      expect(Math.abs(r.utilityScore - e[9]), name).toBeLessThanOrEqual(1e-9 * e[9]);
+      expect(r.formulaVersion).toBe('1.1');
+    }
+  });
+  it('เครื่องอายุเกิน 5 ปี ใช้จำนวนปีที่มีข้อมูล (5) แทนอายุ (9)', () => {
+    const i = { ...toInput(['Old', 2560, 3000000, 70, 5000, 300000, 5, 2500000, 4, 4, 4]), dataYears: 5 };
+    const v10 = computeScore(i, FORMULA_SET_V1);
+    const v11 = computeScore(i, FORMULA_SET_V1_1);
+    expect(v10.ageYears).toBe(9);
+    expect(v10.paybackYears).toBeCloseTo(3000000 / (2500000 / 9), 9); // 10.8 ปี → Financial 0
+    expect(v11.paybackDivisorYears).toBe(5);
+    expect(v11.paybackYears).toBeCloseTo(3000000 / (2500000 / 5), 9); // 6 ปี → Financial 10
+    expect(v11.scores.financial).toBeCloseTo(10, 9);
+    expect(v11.utilityScore - v10.utilityScore).toBeCloseTo(2, 9); // +10 × 0.2
+    expect(v11.explanation.join(' ')).toMatch(/MIN\(อายุ 9, ข้อมูล 5 ปี\)/);
+  });
+  it('aggregateYears ระบุจำนวนปีที่มีข้อมูล', () => {
+    const c = aggregateYears([year(2568), year(2569)], { purchaseYear: 2560, purchasePrice: 3500000 }, 2569);
+    expect(c.dataYears).toBe(2);
+    expect(computeScore(c, FORMULA_SET_V1_1).paybackDivisorYears).toBe(2);
+  });
+  it('v1.1 ต่างจาก v1.0 เฉพาะตัวหาร Payback', () => {
+    const { version: a, paybackDivisor: b, ...r10 } = FORMULA_SET_V1;
+    const { version: c, paybackDivisor: d, ...r11 } = FORMULA_SET_V1_1;
+    expect(r11).toEqual(r10);
+    expect([a, b, c, d]).toEqual(['1.0', 'excel_age', '1.1', 'min_age_data_years']);
   });
 });

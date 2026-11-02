@@ -6,10 +6,15 @@ import type pg from 'pg';
 import { csrfGuard, SESSION_COOKIE, userFromSession } from './auth.js';
 import type { Config } from './config.js';
 import { errorHandler } from './errors.js';
+import { annualRoutes } from './routes/annual.js';
 import { authRoutes } from './routes/auth.js';
+import { cycleRoutes } from './routes/cycles.js';
+import { dashboardRoutes } from './routes/dashboard.js';
 import { equipmentRoutes } from './routes/equipment.js';
 import { formulaRoutes } from './routes/formula.js';
 import { orgRoutes } from './routes/org.js';
+import { reportRoutes } from './routes/reports.js';
+import { scoreRoutes } from './routes/scores.js';
 
 export interface AppDeps {
   pool: pg.Pool;
@@ -37,5 +42,10 @@ export async function buildApp(deps: AppDeps) {
   await orgRoutes(app, deps);
   await equipmentRoutes(app, deps);
   await formulaRoutes(app, deps);
+  await annualRoutes(app, deps);
+  await cycleRoutes(app, deps);
+  await scoreRoutes(app, deps);
+  await dashboardRoutes(app, deps);
+  await reportRoutes(app, deps);
   return app;
 }

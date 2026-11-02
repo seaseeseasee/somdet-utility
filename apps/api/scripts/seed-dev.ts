@@ -39,9 +39,20 @@ export const DEMO = {
     ['DEMOB', 'DEMO-B01', 'เครื่องเอกซเรย์ดิจิทัล', 'รังสีวินิจฉัย', 'กลุ่มงานรังสีวิทยา', 'DemoRay', 'DR-2', 'DM-XR-B001', 2566, 4200000, 'in_use'],
     ['DEMOB', 'DEMO-B02', 'เครื่องกระตุ้นสมองด้วยสนามแม่เหล็ก', 'กระตุ้นสมอง/จิตเวช', 'กลุ่มงานจิตเวช', 'DemoNeuro', 'TMS-1', 'DM-TMS-B002', 2568, 2500000, 'in_use'],
   ] as const,
+  // [code, Utilization %, เคส/ปี, ค่าบำรุงรักษา/ปี, Downtime %, รายได้/ปี, Clinical, Satisfaction, Strategic] — ตัวเลขตัวอย่าง (DEMO)
+  annual: [
+    ['DEMO-001', 78, 3200, 400000, 3, 7100000, 4, 4, 4],
+    ['DEMO-002', 45, 1100, 110000, 8, 560000, 3, 3, 3],
+    ['DEMO-003', 30, 400, 75000, 15, 0, 3, 2, 3],
+    ['DEMO-004', 85, 3000, 500000, 4, 12400000, 5, 4, 5],
+    ['DEMO-005', 88, 7500, 75000, 2, 2250000, 4, 4, 4],
+    ['DEMO-006', 60, 800, 170000, 5, 670000, 4, 3, 4],
+    ['DEMO-007', 70, 1200, 80000, 6, 720000, 4, 4, 4],
+    ['DEMO-008', 25, 430, 130000, 22, 57000, 2, 2, 2],
+  ] as const,
 };
 
-export async function seedDemo(adminUrl: string, log = console.log) {
+export async function seedDemo(adminUrl: string, log = console.log, opts: { annual?: boolean } = {}) {
   const c = new pg.Client({ connectionString: adminUrl });
   await c.connect();
   try {
@@ -89,8 +100,35 @@ export async function seedDemo(adminUrl: string, log = console.log) {
          status === 'repair' || status === 'suspended' ? 'ข้อมูลตัวอย่าง (DEMO)' : null, by],
       );
     }
+    let annual = 0;
+    if (opts.annual) {
+      // ข้อมูลรายปีตัวอย่าง (DEMO) ที่ยืนยันแล้ว ปีงบ 2565–2568 เพื่อให้หน้าผลวิเคราะห์มีข้อมูล (ปี 2569 เว้นไว้ทดลองรอบประเมิน)
+      const reviewer = uid['PID-DEMO-A-REVIEW'];
+      for (const [code, util, casesPerYear, maintPerYear, down, revenuePerYear, k, l, m] of DEMO.annual) {
+        const e = (await c.query('SELECT id, hospital_id, purchase_year_be, created_by FROM equipment WHERE code = $1 AND hospital_id = $2', [code, hid.DEMOA])).rows[0];
+        for (let fy = Math.max(2565, e.purchase_year_be); fy <= 2568; fy++) {
+          const drift = 1 + (fy - 2566) * 0.03;
+          const hours = 2500;
+          await c.query(
+            `INSERT INTO annual_record (hospital_id, equipment_id, fiscal_year_be, available_days, actual_days, max_available_hours, actual_hours,
+               use_count, case_count, repair_cost, parts_cost, pm_cost, calibration_cost, other_cost, revenue, no_direct_revenue,
+               repair_days, breakdown_count, downtime_hours, clinical_rating, satisfaction_rating, strategic_rating, rating_rationale,
+               clinical_necessity, condition, inspected_at, safety_event, recall_status, unit_recommendation, rationale,
+               status, created_by, updated_by, approved_by, approved_at, submitted_at)
+             VALUES ($1,$2,$3,250,$4,$5,$6,$7,$7,$8,$9,$10,$11,0,$12,$13,$14,$15,$16,$17,$18,$19,'ข้อมูลตัวอย่าง (DEMO)',
+               'high','good',$20,false,'none','continue','ข้อมูลตัวอย่าง (DEMO)','approved',$21,$21,$22,now(),now())
+             ON CONFLICT (equipment_id, fiscal_year_be) DO NOTHING`,
+            [e.hospital_id, e.id, fy, Math.round(250 * Math.min(1, (util / 100) * 1.1)), hours, Math.round(hours * Math.min(0.98, (util / 100) * drift)),
+             Math.round(casesPerYear * drift), Math.round(maintPerYear * 0.5), Math.round(maintPerYear * 0.2), Math.round(maintPerYear * 0.2), Math.round(maintPerYear * 0.1),
+             revenuePerYear, revenuePerYear === 0, Math.round(down * 2.5), Math.max(1, Math.round(down / 3)), Math.round(hours * down / 100), k, l, m,
+             `${fy - 543}-10-05`, e.created_by, reviewer],
+          );
+          annual++;
+        }
+      }
+    }
     await c.query('COMMIT');
-    log(`seed DEMO: ${DEMO.hospitals.length} โรงพยาบาล, ${DEMO.users.length} ผู้ใช้, ${DEMO.equipment.length} ครุภัณฑ์`);
+    log(`seed DEMO: ${DEMO.hospitals.length} โรงพยาบาล, ${DEMO.users.length} ผู้ใช้, ${DEMO.equipment.length} ครุภัณฑ์${opts.annual ? `, ข้อมูลรายปี ${annual} รายการ` : ''}`);
     return { hid, uid, dep, types };
   } catch (e) {
     await c.query('ROLLBACK');
@@ -103,5 +141,5 @@ export async function seedDemo(adminUrl: string, log = console.log) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const url = process.env.DATABASE_ADMIN_URL;
   if (!url) throw new Error('ต้องกำหนด DATABASE_ADMIN_URL');
-  await seedDemo(url);
+  await seedDemo(url, console.log, { annual: process.argv.includes('--annual') });
 }

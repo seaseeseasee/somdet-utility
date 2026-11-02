@@ -132,3 +132,52 @@ textarea.in { height: auto; min-height: 72px; padding: 8px 12px; }
   .grid-f { grid-template-columns: 1fr; } .grid-f .span2 { grid-column: auto; }
   .login { grid-template-columns: 1fr; } .lg-l { padding: 32px 20px; }
 }
+
+/* Sprint 3 */
+button.kpi { text-align: left; font: inherit; cursor: pointer; }
+button.kpi.sel { box-shadow: 0 0 0 2px var(--blue) inset; }
+.steps { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.st { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+.st .c { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #c3d1e3; display: grid; place-items: center; font-size: 12px; background: #fff; }
+.st.done { color: var(--good); } .st.done .c { background: var(--good); border-color: var(--good); color: #fff; }
+.st.cur { color: var(--blue); } .st.cur .c { border-color: var(--blue); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { padding: 10px 14px; font-size: 14.5px; font-weight: 600; color: var(--ink-2); border-bottom: 3px solid transparent; display: flex; gap: 8px; align-items: center; text-decoration: none; white-space: nowrap; }
+.tab.on { color: var(--blue); border-color: var(--blue); }
+.calc-line { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font-size: 13.5px; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.calc-line .f { grid-column: 1 / -1; font-size: 12px; color: var(--ink-3); font-family: ui-monospace, Menlo, monospace; }
+.calc-line b { color: var(--navy); }
+.sticky { position: sticky; top: 12px; }
+.grid-f.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .grid-f.g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sticky { position: static; } }
+@media (max-width: 800px) { .grid-f.g4 { grid-template-columns: 1fr; } }
+
+/* Sprint 4 */
+.score { display: inline-grid; place-items: center; min-width: 52px; height: 30px; border-radius: 8px; font-weight: 700; font-size: 15px; padding: 0 6px; }
+.score.g { background: var(--good-bg); color: var(--good); } .score.b { background: var(--mid-bg); color: var(--blue); }
+.score.w { background: var(--warn-bg); color: var(--warn); } .score.r { background: var(--bad-bg); color: var(--bad); }
+.score.big { font-size: 40px; height: auto; background: none; padding: 0; }
+.tbl tr.sel td { background: #eef5ff; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+.legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.mini-bar { height: 8px; border-radius: 99px; background: #e7edf5; overflow: hidden; min-width: 60px; }
+.mini-bar > span { display: block; height: 100%; background: var(--blue-2); }
+.badge-v { font-size: 12px; background: #eef1f8; color: #3a4b66; border: 1px solid #d5ddeb; padding: 3px 8px; border-radius: 6px; font-weight: 600; }
+
+.tbl.compact { font-size: 13px; }
+.tbl.compact th, .tbl.compact td { padding: 8px 6px; }
+.split.scores { grid-template-columns: minmax(0, 1fr) 340px; }
+@media (max-width: 1280px) { .split.scores { grid-template-columns: 1fr; } }
+
+/* Sprint 5 */
+.dash-row { display: grid; gap: 18px; }
+.dash-row.r32 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.dash-row.r3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dash-row.r2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .dash-row.r32, .dash-row.r3, .dash-row.r2 { grid-template-columns: 1fr; } }
+.stackbar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: #eef1f5; min-width: 120px; }
+.stackbar span { display: block; height: 100%; }
+.stackbar .na { background: repeating-linear-gradient(45deg, #e1e7ef 0 4px, #f4f6f9 4px 8px); }
+.tbl.hm td.cell { border: 2px solid #fff; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tbl.hm th { white-space: normal; font-size: 12px; }
