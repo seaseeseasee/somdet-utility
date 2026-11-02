@@ -1,0 +1,96 @@
+import { useEffect, useState, type FormEvent } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { api, ApiError } from '../lib/api';
+import { useAuth } from '../lib/auth';
+
+const DEMO_ACCOUNTS = [
+  ['PID-DEMO-A-ENTRY', 'เจ้าหน้าที่บันทึกข้อมูล — รพ.ตัวอย่าง A'],
+  ['PID-DEMO-A-ADMIN', 'ผู้ดูแลระบบโรงพยาบาล — รพ.ตัวอย่าง A'],
+  ['PID-DEMO-A-REVIEW', 'ผู้ตรวจสอบ — รพ.ตัวอย่าง A'],
+  ['PID-DEMO-A-EXEC', 'ผู้บริหารโรงพยาบาล — รพ.ตัวอย่าง A'],
+  ['PID-DEMO-B-ENTRY', 'เจ้าหน้าที่บันทึกข้อมูล — รพ.ตัวอย่าง B'],
+  ['PID-DEMO-CA', 'ผู้ดูแลระบบส่วนกลาง'],
+  ['PID-DEMO-CE', 'ผู้บริหารส่วนกลาง'],
+];
+
+export function Login() {
+  const { me, refresh } = useAuth();
+  const nav = useNavigate();
+  const [cfg, setCfg] = useState<{ devLoginEnabled: boolean; oidcConfigured: boolean } | null>(null);
+  const [pid, setPid] = useState(DEMO_ACCOUNTS[0]![0]);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.get<{ devLoginEnabled: boolean; oidcConfigured: boolean }>('/api/auth/config').then(setCfg).catch(() => setCfg(null));
+  }, []);
+  if (me) return <Navigate to="/" replace />;
+
+  const providerLogin = async () => {
+    setMsg(null);
+    try {
+      await api.get('/api/auth/login');
+    } catch (e) {
+      setMsg(e instanceof ApiError && e.status === 501 ? 'ยังไม่ได้เชื่อมต่อ Provider ID รอเอกสาร API/OIDC จากผู้ดูแลระบบ' : 'เข้าสู่ระบบไม่สำเร็จ');
+    }
+  };
+  const devLogin = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.post('/api/auth/dev-login', { providerId: pid });
+      await refresh();
+      nav('/');
+    } catch (err) {
+      setMsg(err instanceof ApiError ? err.message : 'เข้าสู่ระบบไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="login">
+      <div className="lg-l">
+        <div className="brand">
+          <div className="logo" style={{ width: 52, height: 52, fontSize: 20 }}>MU</div>
+          <div>
+            <b style={{ fontSize: 18 }}>Medical Equipment Utility Analysis</b>
+            <small style={{ fontSize: 13 }}>ระบบวิเคราะห์ความคุ้มค่าครุภัณฑ์ทางการแพทย์</small>
+          </div>
+        </div>
+        <h2>ข้อมูลการใช้งาน ต้นทุน และผลลัพธ์ของครุภัณฑ์ย้อนหลัง 5 ปี ในที่เดียว</h2>
+        <p>สนับสนุนการตัดสินใจจัดซื้อ บำรุงรักษา ทดแทน และเพิ่มจำนวนครุภัณฑ์ ด้วยคะแนน Utility 6 ปัจจัยที่ตรวจสอบที่มาได้ทุกคะแนน</p>
+        <p style={{ marginTop: 'auto', fontSize: 13 }}>ระบบนี้ใช้สำหรับบุคลากรของหน่วยงานเท่านั้น การเข้าใช้งานทุกครั้งถูกบันทึก</p>
+      </div>
+      <div className="lg-r">
+        <div className="lg-card">
+          <div>
+            <h3>เข้าสู่ระบบ</h3>
+            <div className="muted" style={{ fontSize: 14 }}>ใช้บัญชี Provider ID ระบบจะพาไปยืนยันตัวตนที่หน้าของผู้ให้บริการ และไม่เก็บรหัสผ่าน</div>
+          </div>
+          <button className="btn p pid-btn" onClick={() => void providerLogin()} disabled={!cfg?.oidcConfigured}>
+            เข้าสู่ระบบด้วย Provider ID
+          </button>
+          {!cfg?.oidcConfigured && <div className="note">ยังไม่ได้เชื่อมต่อ Provider ID — รอเอกสาร API/OIDC และ client_id จากผู้ดูแลระบบ</div>}
+          {cfg?.devLoginEnabled && (
+            <form className="stack note" onSubmit={devLogin} style={{ borderStyle: 'solid' }}>
+              <b>โหมดพัฒนา (ไม่ใช่ Provider ID)</b>
+              <div className="fld">
+                <label htmlFor="pid">บัญชีตัวอย่าง (DEMO)</label>
+                <select id="pid" className="in" value={pid} onChange={(e) => setPid(e.target.value)}>
+                  {DEMO_ACCOUNTS.map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+              <button className="btn" disabled={busy}>{busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบแบบจำลอง'}</button>
+              <span className="hint">ปิดอัตโนมัติเมื่อติดตั้งจริง (NODE_ENV=production)</span>
+            </form>
+          )}
+          {msg && <div className="note red" role="alert">{msg}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
