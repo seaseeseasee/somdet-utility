@@ -288,19 +288,20 @@ describe('ยืนยันนำเข้าและแสดงผล', () =
     expect(r).toMatchObject({ inserted: 1, replaced: 2, registered: 0, reused: 1, removed: 1 });
     expect((await as('aEntry').get('/api/equipment')).json().total).toBe(17);
   });
-  it('ปรับน้ำหนักแล้วคะแนนเปลี่ยนทันที; เฉพาะส่วนกลางปรับได้ และน้ำหนักรวมต้อง = 1', async () => {
+  it('ปรับชุดสูตร (หน้า สมมติฐานและน้ำหนักคะแนน) แล้วคะแนนของข้อมูลนำเข้าเปลี่ยนทันที', async () => {
     const before = (await records()).rows.find((r) => r.name.startsWith('เครื่องจัดยาอัตโนมัติ'))!.utilityScore!;
     const body = { weights: { utilization: 0.5, clinical: 0.1, financial: 0.1, reliability: 0.1, satisfaction: 0.1, strategic: 0.1 }, paybackPenalty: 15, currentYearBe: 2569 };
-    expect((await as('aEntry').post('/api/utility/settings', body)).statusCode).toBe(403);
-    expect((await as('ca').post('/api/utility/settings', { ...body, weights: { ...body.weights, utilization: 0.6 } })).statusCode).toBe(400);
-    expect((await as('ca').post('/api/utility/settings', body)).statusCode).toBe(201);
+    expect((await as('ca').post('/api/formula-sets', body)).statusCode).toBe(201);
     const after = (await records()).rows.find((r) => r.name.startsWith('เครื่องจัดยาอัตโนมัติ'))!.utilityScore!;
     // 95×0.5 + 80×0.1 + 50×0.1 + 85×0.1 + 80×0.1 + 80×0.1
     expect(after).toBeCloseTo(85, 9);
     expect(after).not.toBeCloseTo(before, 3);
-    const s = (await as('aEntry').get('/api/utility/settings')).json();
-    expect(s.active.weights.utilization).toBe(0.5);
-    expect(s.history.length).toBeGreaterThanOrEqual(2);
+    // ครุภัณฑ์ที่ใช้คะแนนจากไฟล์ในหน้าผลวิเคราะห์ใช้ชุดสูตรใหม่ด้วย
+    const s = (await as('aEntry').get('/api/scores?year=2569')).json();
+    const lithium = s.rows.find((r: { equipment: { name: string } }) => r.equipment.name.startsWith('เครื่องตรวจวิเคราะห์สารอิเลคโตรไลท์'));
+    expect(lithium.source).toBe('excel');
+    // 2×0.5 + 20×0.1 + 0×0.1 + 100×0.1 + 20×0.1 + 20×0.1 (ปี 2569 − 2565 = 4 ปี, Payback 1,092 ปี → Financial 0)
+    expect(lithium.utilityScore).toBeCloseTo(17, 9);
   });
   it('ดาวน์โหลดไฟล์แบบฟอร์มเปล่า (หัวตารางแถว 3) แล้วอ่านกลับได้', async () => {
     const r = await env.app.inject({ method: 'GET', url: '/api/utility/template', headers: { cookie: C.aEntry! } });

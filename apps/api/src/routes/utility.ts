@@ -8,8 +8,8 @@ import { withTx } from '../db.js';
 import { HttpError } from '../errors.js';
 import { buildPreview, checkFile, clean, LIMITS, parseWorkbook, sha256, type ParsedSettings, type PreviewSheet } from '../utility/parse.js';
 import { matchKey, registrar } from '../utility/register.js';
-import { currentYearOf, scoreDataset, settingsProblems, type ScoringSettings } from '../utility/score.js';
-import { activeSettings, toSettings } from '../utility/settings.js';
+import { currentYearOf, scoreDataset, type ScoringSettings } from '../utility/score.js';
+import { activeSettings } from '../utility/settings.js';
 import type { AppDeps } from '../app.js';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -83,7 +83,7 @@ export async function utilityRoutes(app: FastifyInstance, { pool }: AppDeps) {
       if (previous.length) notices.push(`ไฟล์นี้เคยนำเข้าแล้ว ${previous.length} ครั้ง (ล่าสุด ${new Date(previous[0].uploaded_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}) ตรวจสอบก่อนยืนยันเพื่อไม่ให้ข้อมูลซ้ำ`);
       if (wb.settings?.problems.length) notices.push(`ไม่นำชุดน้ำหนักจากชีต "สมมติฐาน" มาใช้: ${wb.settings.problems.join('; ')}`);
       else if (wb.settings?.values && differs(wb.settings.values, settings))
-        notices.push('น้ำหนักในชีต "สมมติฐาน" ต่างจากชุดที่ระบบเปิดใช้ ระบบคำนวณด้วยชุดที่เปิดใช้ และเก็บค่าจากไฟล์ไว้คู่กับการนำเข้านี้');
+        notices.push(`น้ำหนักในชีต "สมมติฐาน" ต่างจากชุดสูตรที่ระบบใช้ (v${settings.version}) ระบบคำนวณด้วยชุดสูตรของระบบ และเก็บค่าจากไฟล์ไว้คู่กับการนำเข้านี้ · ผู้ดูแลระบบส่วนกลางปรับชุดสูตรได้ที่หน้า "สมมติฐานและน้ำหนักคะแนน"`);
       return {
         previewToken: token,
         expiresInMinutes: PREVIEW_TTL_MS / 60000,
@@ -299,43 +299,4 @@ export async function utilityRoutes(app: FastifyInstance, { pool }: AppDeps) {
       .send(Buffer.from(buf));
   });
 
-  // ---------------------------------------------------------------- ชุดน้ำหนัก (ส่วนกลางเปิดใช้)
-  app.get('/api/utility/settings', async (req) => {
-    const u = requirePerm(req, 'equipment.read');
-    return withTx(pool, u.scope, async (db) => {
-      const active = await activeSettings(db);
-      const history = (await db.query('SELECT * FROM scoring_settings ORDER BY created_at DESC LIMIT 20')).rows.map(toSettings);
-      return { active: { ...active, currentYearBeUsed: currentYearOf(active) }, history };
-    });
-  });
-
-  app.post('/api/utility/settings', async (req, reply) => {
-    const u = requirePerm(req, 'utility.settings');
-    const n = z.number().finite();
-    const b = z
-      .object({
-        weights: z.object({ utilization: n, clinical: n, financial: n, reliability: n, satisfaction: n, strategic: n }),
-        paybackPenalty: n,
-        currentYearBe: z.number().int().nullable(),
-        source: z.enum(['manual', 'import']).default('manual'),
-      })
-      .parse(req.body);
-    const problems = settingsProblems(b);
-    if (problems.length) throw new HttpError(400, problems.join('; '), problems.map((m) => ({ field: 'weights', message: m })));
-    const row = await withTx(pool, u.scope, async (db) => {
-      const before = await activeSettings(db);
-      await db.query('UPDATE scoring_settings SET is_active = false WHERE is_active');
-      const w = b.weights;
-      const r = (
-        await db.query(
-          `INSERT INTO scoring_settings (w_utilization, w_clinical, w_financial, w_reliability, w_satisfaction, w_strategic, payback_penalty,
-             current_year_be, is_active, source, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$10) RETURNING *`,
-          [w.utilization, w.clinical, w.financial, w.reliability, w.satisfaction, w.strategic, b.paybackPenalty, b.currentYearBe, b.source, u.id],
-        )
-      ).rows[0];
-      await writeAudit(db, { hospitalId: null, actorId: u.id, action: 'activate', entity: 'scoring_settings', entityId: r.id, before, after: toSettings(r), ip: req.ip });
-      return toSettings(r);
-    });
-    return reply.code(201).send(row);
-  });
 }

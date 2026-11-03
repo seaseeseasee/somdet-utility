@@ -35,6 +35,11 @@ export interface FormulaSet {
   thresholds: { high: number; good: number; medium: number };
   /** ธงเตือน D-12: Utilization < x% หรือ Score < y */
   warning: { utilizationBelow: number; scoreBelow: number };
+  /**
+   * สมมติฐาน!B11 ปีปัจจุบัน (พ.ศ.) — ใช้คิดอายุเครื่องของข้อมูลสะสมที่นำเข้าจาก Excel
+   * null/ไม่ระบุ = ปีปัจจุบันตามวันที่ (ข้อมูลรายปีใช้ปีที่วิเคราะห์ที่ผู้ใช้เลือกแทน)
+   */
+  currentYearBe?: number | null;
 }
 
 export const FORMULA_SET_V1: Readonly<FormulaSet> = Object.freeze({
@@ -442,10 +447,160 @@ export function rankScores(scores: number[]): number[] {
   return scores.map((s) => 1 + scores.filter((o) => o > s).length);
 }
 
+// ---------------------------------------------------------------- ระดับ Utilization และข้อเสนอแนะ
+
+export type UtilizationLevel = 1 | 2 | 3 | 4 | 5;
+
+/** เกณฑ์ 5 ระดับ (ช่วงไม่ทับซ้อนและไม่ตกหล่น: ค่าที่ขอบ เช่น 80% อยู่ระดับที่สูงกว่า) */
+export const UTILIZATION_LEVELS: Record<UtilizationLevel, { min: number; range: string; label: string; advice: string }> = {
+  5: { min: 80, range: '≥ 80%', label: 'ใช้งานสูงมาก', advice: 'ควรคงการใช้งานอย่างต่อเนื่อง วางแผนบำรุงรักษา และประเมินความเพียงพอของอุปกรณ์' },
+  4: { min: 60, range: '60–79.99%', label: 'ใช้งานสูง', advice: 'ควรคงการใช้งาน ติดตามปริมาณการใช้งานและประสิทธิภาพอย่างสม่ำเสมอ' },
+  3: { min: 40, range: '40–59.99%', label: 'ใช้งานปานกลาง', advice: 'ควรทบทวนตารางการใช้งาน วิเคราะห์ช่วงเวลาที่ใช้งานน้อย และเพิ่มประสิทธิภาพการใช้งาน' },
+  2: { min: 20, range: '20–39.99%', label: 'ใช้งานต่ำ', advice: 'ควรวิเคราะห์สาเหตุที่ใช้งานต่ำ และพิจารณาการใช้ร่วมกันหรือโอนย้ายหน่วยงาน' },
+  1: { min: 0, range: '< 20%', label: 'ใช้งานต่ำมาก', advice: 'ควรทบทวนความจำเป็นในการครอบครอง ประเมินความคุ้มค่า และพิจารณาโอนย้ายหรือจำหน่ายตามระเบียบ' },
+};
+
+/** อุปกรณ์ช่วยชีวิต/สำรองฉุกเฉิน: ใช้น้อยเป็นเรื่องปกติ จึงไม่แนะนำโอนย้ายหรือจำหน่ายจากระดับการใช้งาน */
+export const CRITICAL_LOW_USE_ADVICE =
+  'อุปกรณ์ช่วยชีวิต/สำรองฉุกเฉิน: การใช้งานน้อยอาจเป็นเรื่องปกติ ควรตรวจความพร้อมใช้งานสม่ำเสมอ และทบทวนจำนวนที่ต้องสำรองตามความจำเป็นทางคลินิก ไม่ใช้ระดับ Utilization เป็นเหตุผลโอนย้ายหรือจำหน่าย';
+export const ADVICE_DISCLAIMER = 'ข้อเสนอแนะเป็นข้อมูลประกอบการพิจารณาของผู้บริหาร ไม่ใช่การตัดสินใจอัตโนมัติ';
+
+/**
+ * ระดับ Utilization (1–5) — ปัดเป็นทศนิยม 2 ตำแหน่งก่อนเทียบเกณฑ์ (ตรงกับช่วง 60–79.99% ในเกณฑ์)
+ * ไม่มีค่า, ติดลบ หรือเกิน 100% = ข้อมูลผิดปกติ ไม่จัดระดับ (null)
+ */
+export function utilizationLevelOf(pct: number | null | undefined): UtilizationLevel | null {
+  if (!isNum(pct)) return null;
+  const v = Math.round(pct * 100) / 100;
+  if (v < 0 || v > 100) return null;
+  for (const lvl of [5, 4, 3, 2] as const) if (v >= UTILIZATION_LEVELS[lvl].min) return lvl;
+  return 1;
+}
+
+export interface UtilizationAdvice {
+  level: UtilizationLevel;
+  label: string;
+  range: string;
+  advice: string;
+  /** อุปกรณ์ช่วยชีวิต/สำรองฉุกเฉิน — ใช้ข้อเสนอแนะแบบพิเศษเมื่อระดับต่ำ */
+  critical: boolean;
+}
+
+/** ข้อเสนอแนะตามระดับ Utilization (null = ไม่มีข้อมูลหรือข้อมูลผิดปกติ) */
+export function utilizationAdvice(pct: number | null | undefined, opt: { critical?: boolean } = {}): UtilizationAdvice | null {
+  const level = utilizationLevelOf(pct);
+  if (level === null) return null;
+  const l = UTILIZATION_LEVELS[level];
+  const critical = Boolean(opt.critical);
+  return { level, label: l.label, range: l.range, advice: critical && level <= 2 ? CRITICAL_LOW_USE_ADVICE : l.advice, critical };
+}
+
+// ---------------------------------------------------------------- ผลประเมินความคุ้มค่า (เกณฑ์เสริม)
+// แยกจากเกณฑ์ข้อเสนอแนะของชุดสูตร (thresholds) และไม่ใช้ในรายงานผู้บริหาร
+
+export type ValueLevel = 'very_worth' | 'worth' | 'watch' | 'not_worth';
+
+/** ระดับคะแนนรวม: ≥ 80 / 65–79.99 / 50–64.99 / < 50 */
+export const VALUE_LEVELS: Record<ValueLevel, { min: number; range: string; label: string; advice: string }> = {
+  very_worth: { min: 80, range: '≥ 80', label: 'คุ้มค่ามาก', advice: 'คงใช้ต่อ / ขยายหรือจัดหาเพิ่มได้' },
+  worth: { min: 65, range: '65–79', label: 'คุ้มค่า', advice: 'คงใช้ต่อ ติดตามตามรอบปกติ' },
+  watch: { min: 50, range: '50–64', label: 'พอใช้ / ต้องเฝ้าระวัง', advice: 'ทบทวนปัญหารายมิติ แล้วทำแผนปรับปรุง' },
+  not_worth: { min: 0, range: '< 50', label: 'ไม่คุ้มค่า', advice: 'พิจารณาลดการลงทุน ย้ายใช้งาน ทดแทน หรือจำหน่าย' },
+};
+
+/** รายมิติ: < 50 = ต่ำ, 50–59.99 = เฝ้าระวัง */
+export const DIMENSION_LOW = 50;
+export const DIMENSION_WATCH = 60;
+/** กฎเสริม: Reliability หรือ Clinical ต่ำกว่านี้ = ธงแดงด้านความปลอดภัยผู้ป่วย */
+export const SAFETY_RED_FLAG = 40;
+
+export const DIMENSION_ADVICE: Record<keyof FactorScores, { label: string; meaning: string; actions: string }> = {
+  utilization: { label: 'Utilization', meaning: 'ใช้งานน้อย', actions: 'เพิ่มข้อบ่งใช้ ย้ายไปหน่วยที่ใช้มากกว่า ทบทวนว่าจำเป็นต้องมีหรือไม่' },
+  financial: { label: 'Financial', meaning: 'คืนทุนช้า ต้นทุนต่อเคสสูง', actions: 'ปรับราคา/การเบิกจ่าย เพิ่มจำนวนเคส ต่อรองสัญญาบำรุงรักษา' },
+  reliability: { label: 'Reliability', meaning: 'เสียบ่อย downtime สูง', actions: 'เพิ่ม PM ทบทวนสัญญาซ่อม เตรียมเครื่องสำรอง พิจารณาทดแทน' },
+  clinical: { label: 'Clinical', meaning: 'ประโยชน์ทางคลินิกต่ำ', actions: 'ทบทวนข้อบ่งใช้ ปรึกษาแพทย์ผู้ใช้ ดูว่ามีทางเลือกที่ดีกว่าหรือไม่' },
+  satisfaction: { label: 'Satisfaction', meaning: 'ผู้ใช้ไม่พอใจ', actions: 'สำรวจสาเหตุ อบรมการใช้งาน ปรับ workflow' },
+  strategic: { label: 'Strategic', meaning: 'ไม่สอดคล้องแผน', actions: 'ประเมินบทบาทในแผนพัฒนาบริการ ตัดสินใจคงหรือเลิก' },
+};
+
+export type DimensionStatus = 'ok' | 'watch' | 'low' | 'insufficient';
+
+export interface ValueAssessment {
+  level: ValueLevel;
+  label: string;
+  range: string;
+  advice: string;
+  dimensions: { key: keyof FactorScores; label: string; score: number; status: DimensionStatus; meaning?: string; actions?: string }[];
+  /** กฎเสริม (override): red = กระทบความปลอดภัยหรือสรุปได้ว่าไม่คุ้มทุน, info = ข้อจำกัดของข้อมูล */
+  flags: { severity: 'red' | 'info'; rule: 'safety' | 'payback_over_life' | 'payback_na' | 'no_useful_life'; text: string }[];
+}
+
+const round2 = (v: number) => Math.round(v * 100) / 100;
+
+export function valueLevelOf(score: number): ValueLevel {
+  const v = round2(score);
+  for (const k of ['very_worth', 'worth', 'watch'] as const) if (v >= VALUE_LEVELS[k].min) return k;
+  return 'not_worth';
+}
+
+/** ประเมินความคุ้มค่าจากผลคำนวณ Utility Score พร้อมกฎเสริม */
+export function assessValue(b: Pick<ScoreBreakdown, 'utilityScore' | 'scores' | 'paybackYears'>, opt: { usefulLifeYears?: number | null } = {}): ValueAssessment {
+  const level = valueLevelOf(b.utilityScore);
+  const paybackNA = b.paybackYears === null;
+  const dimensions = (Object.keys(DIMENSION_ADVICE) as (keyof FactorScores)[]).map((key) => {
+    const score = b.scores[key];
+    const d = DIMENSION_ADVICE[key];
+    // Financial = 50 เป็นค่ากลางเมื่อไม่มีรายได้ตรง จึงห้ามสรุปผลด้านการเงิน
+    const status: DimensionStatus =
+      key === 'financial' && paybackNA ? 'insufficient' : round2(score) < DIMENSION_LOW ? 'low' : round2(score) < DIMENSION_WATCH ? 'watch' : 'ok';
+    return { key, label: d.label, score, status, ...(status === 'low' || status === 'watch' ? { meaning: d.meaning, actions: d.actions } : {}) };
+  });
+
+  const flags: ValueAssessment['flags'] = [];
+  for (const k of ['reliability', 'clinical'] as const)
+    if (round2(b.scores[k]) < SAFETY_RED_FLAG)
+      flags.push({ severity: 'red', rule: 'safety', text: `${DIMENSION_ADVICE[k].label} Score ${b.scores[k].toFixed(1)} < ${SAFETY_RED_FLAG}: กระทบความปลอดภัยผู้ป่วย ต้องแก้ไขก่อน แม้คะแนนรวมสูง` });
+  if (paybackNA) flags.push({ severity: 'info', rule: 'payback_na', text: 'Payback = N/A: ข้อมูลด้านการเงินไม่เพียงพอ (Financial 50 เป็นค่ากลาง ไม่ใช้สรุปผลด้านการเงิน)' });
+  else if (opt.usefulLifeYears && b.paybackYears! > opt.usefulLifeYears)
+    flags.push({ severity: 'red', rule: 'payback_over_life', text: `Payback ${b.paybackYears!.toFixed(1)} ปี เกินอายุการใช้งานตามเกณฑ์ ${opt.usefulLifeYears} ปี: ไม่คุ้มทุน` });
+  else if (!opt.usefulLifeYears)
+    flags.push({ severity: 'info', rule: 'no_useful_life', text: 'ยังไม่ได้กำหนดอายุการใช้งานตามเกณฑ์ในทะเบียน จึงเทียบ Payback กับอายุเครื่องไม่ได้' });
+
+  const l = VALUE_LEVELS[level];
+  return { level, label: l.label, range: l.range, advice: l.advice, dimensions, flags };
+}
+
+/**
+ * สร้างชุดสูตรจาก definition ที่เก็บในฐานข้อมูล (ตาราง formula_set) — ค่าที่ไม่มีใช้ค่าเดิมของ v1.0
+ * ทำให้ผู้ดูแลระบบสร้างชุดสูตรเวอร์ชันใหม่ (ปรับน้ำหนัก/ตัวคูณ Payback/ปีปัจจุบัน) ได้โดยไม่ต้องแก้โปรแกรม
+ */
+export function formulaSetFromDefinition(version: string, def: Record<string, unknown>): FormulaSet {
+  const d = def as Partial<FormulaSet>;
+  const fs: FormulaSet = {
+    ...FORMULA_SET_V1,
+    version,
+    weights: { ...FORMULA_SET_V1.weights, ...(d.weights ?? {}) },
+    paybackPenalty: d.paybackPenalty ?? FORMULA_SET_V1.paybackPenalty,
+    paybackDivisor: d.paybackDivisor ?? FORMULA_SET_V1.paybackDivisor,
+    noRevenueFinancialScore: d.noRevenueFinancialScore ?? FORMULA_SET_V1.noRevenueFinancialScore,
+    ratingMultiplier: d.ratingMultiplier ?? FORMULA_SET_V1.ratingMultiplier,
+    thresholds: { ...FORMULA_SET_V1.thresholds, ...(d.thresholds ?? {}) },
+    warning: { ...FORMULA_SET_V1.warning, ...(d.warning ?? {}) },
+    currentYearBe: d.currentYearBe ?? null,
+  };
+  const problems = validateFormulaSet(fs);
+  if (problems.length) throw new Error(`ชุดสูตร ${version} ไม่ถูกต้อง: ${problems.join('; ')}`);
+  return fs;
+}
+
 export function validateFormulaSet(fs: FormulaSet): string[] {
   const p: string[] = [];
+  for (const [k, v] of Object.entries(fs.weights)) if (!isNum(v) || v < 0) p.push(`น้ำหนัก ${k} ต้องเป็นตัวเลขที่ไม่ติดลบ`);
+  if (!isNum(fs.paybackPenalty) || fs.paybackPenalty < 0) p.push('ตัวคูณ Payback ต้องเป็นตัวเลขที่ไม่ติดลบ');
+  if (fs.currentYearBe != null && (!Number.isInteger(fs.currentYearBe) || fs.currentYearBe < 2500 || fs.currentYearBe > 2700))
+    p.push('ปีปัจจุบัน (พ.ศ.) ต้องเป็นจำนวนเต็มระหว่าง 2500–2700');
   const sum = Object.values(fs.weights).reduce((a, b) => a + b, 0);
-  if (Math.abs(sum - 1) > 1e-9) p.push(`ผลรวมน้ำหนักต้องเท่ากับ 1.00 (ปัจจุบัน ${sum})`);
+  if (Math.abs(sum - 1) > 1e-6) p.push(`ผลรวมน้ำหนักต้องเท่ากับ 1.00 (100%) ปัจจุบัน ${Number(sum.toFixed(6))}`);
   if (!(fs.thresholds.high > fs.thresholds.good && fs.thresholds.good > fs.thresholds.medium))
     p.push('เกณฑ์ต้องเรียง high > good > medium');
   return p;

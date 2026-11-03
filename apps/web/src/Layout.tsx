@@ -1,4 +1,6 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { api } from './lib/api';
 import { useAuth } from './lib/auth';
 
 type Item = { to: string; label: string; perm?: string; soon?: string; central?: boolean; end?: boolean };
@@ -14,13 +16,19 @@ const NAV: [string, Item[]][] = [
     { to: '/scores', label: 'ผลวิเคราะห์ Utility Score', perm: 'dashboard.view' },
     { to: '/reports', label: 'รายงานผู้บริหาร', perm: 'report.export' },
   ]],
-  ['ระบบ', [{ to: '/users', label: 'ผู้ใช้งานและสิทธิ์', perm: 'users.manage' }]],
+  ['ระบบ', [
+    { to: '/formula', label: 'สมมติฐานและน้ำหนักคะแนน', perm: 'dashboard.view' },
+    { to: '/users', label: 'ผู้ใช้งานและสิทธิ์', perm: 'users.manage' },
+  ]],
 ];
-const TITLES: Record<string, string> = { equipment: 'ทะเบียนครุภัณฑ์', users: 'ผู้ใช้งานและสิทธิ์', scores: 'ผลการวิเคราะห์ Utility Score', dashboard: 'Dashboard โรงพยาบาล', network: 'Dashboard ภาพรวมเครือข่าย', reports: 'รายงานสำหรับผู้บริหาร' };
+const TITLES: Record<string, string> = { equipment: 'ทะเบียนครุภัณฑ์', users: 'ผู้ใช้งานและสิทธิ์', scores: 'ผลการวิเคราะห์ Utility Score', dashboard: 'Dashboard โรงพยาบาล', network: 'Dashboard ภาพรวมเครือข่าย', reports: 'รายงานสำหรับผู้บริหาร', formula: 'สมมติฐานและน้ำหนักคะแนน' };
 
 export function Layout() {
   const { me, logout, can } = useAuth();
+  const [formula, setFormula] = useState<string | null>(null);
   const loc = useLocation();
+  // เวอร์ชันชุดสูตรที่ใช้อยู่ (อัปเดตเมื่อเปลี่ยนหน้า เช่น หลังผู้ดูแลปรับน้ำหนัก)
+  useEffect(() => { if (me) api.get<{ version: string }>('/api/formula-sets/current').then((r) => setFormula(r.version), () => undefined); }, [me, loc.pathname]);
   if (!me) return null;
   const isCentral = me.scope === 'all';
   const section = loc.pathname.split('/')[1] ?? '';
@@ -52,7 +60,7 @@ export function Layout() {
           })}
         </nav>
         <div className="foot">
-          ชุดสูตร: <b>v1.1 (อนุมัติแล้ว)</b>
+          ชุดสูตร: <Link to="/formula"><b>{formula ? `v${formula}` : '…'}</b></Link>
         </div>
       </aside>
       <div className="main">

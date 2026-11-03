@@ -36,9 +36,8 @@ export const PERMISSIONS = {
   'hospital.manage': ['central_admin'],
   'department.manage': ['central_admin', 'data_entry'],
   'formula.manage': ['central_admin'],
-  // นำเข้าข้อมูล Utility Analysis จากไฟล์ Excel / เปิดใช้ชุดน้ำหนักสำหรับข้อมูลที่นำเข้า
+  // นำเข้าข้อมูล Utility Analysis จากไฟล์ Excel (น้ำหนักคะแนนใช้ชุดสูตรเดียวกับทั้งระบบ: formula.manage)
   'utility.import': ['data_entry', 'central_admin'],
-  'utility.settings': ['central_admin'],
   'audit.view': ['central_admin', 'data_entry'],
 } as const satisfies Record<string, readonly Role[]>;
 export type Permission = keyof typeof PERMISSIONS;

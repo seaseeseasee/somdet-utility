@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
-import { RECOMMENDATION_TEXT } from '@mu/formula';
+import { ADVICE_DISCLAIMER, assessValue, RECOMMENDATION_TEXT, UTILIZATION_LEVELS, type UtilizationAdvice, type ValueAssessment } from '@mu/formula';
 import { z } from 'zod';
 import { fiscalYearOf } from '../annual.js';
 import { requirePerm } from '../auth.js';
 import { withTx } from '../db.js';
 import { HttpError } from '../errors.js';
-import { annualSeries, currentFormulaSet, EQ_SELECT, scoreAll, scoreFromRecords, WINDOW_YEARS, type EquipmentLite, type ScoreOutcome } from '../scoring.js';
+import { annualSeries, currentFormulaSet, EQ_SELECT, scoreAll, scoreFromRecords, utilizationFor, WINDOW_YEARS, type EquipmentLite, type ScoreOutcome } from '../scoring.js';
 import type { AppDeps } from '../app.js';
 
 const Year = z.coerce.number().int().min(2500).max(2700);
@@ -15,7 +15,7 @@ interface ScoreRow {
   equipment: Record<string, unknown>; status: string; dataYears: number[]; rank: number | null;
   utilityScore?: number; scores?: unknown; paybackYears?: number | null; costPerCase?: number | null;
   recommendation?: string; recommendationText?: string; warning?: boolean; utilizationPct?: number; problems?: string[];
-  source?: 'annual' | 'excel';
+  source?: 'annual' | 'excel'; utilization?: UtilizationAdvice | null; assessment?: ValueAssessment;
 }
 
 export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
@@ -39,6 +39,8 @@ export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
               utilityScore: o.breakdown.utilityScore, scores: o.breakdown.scores, paybackYears: o.breakdown.paybackYears,
               costPerCase: o.breakdown.costPerCase, recommendation: o.breakdown.recommendation, recommendationText: o.breakdown.recommendationText,
               warning: o.breakdown.warning, utilizationPct: o.inputs.utilizationPct, source: o.source,
+              utilization: utilizationFor(e, o.inputs.utilizationPct),
+              assessment: assessValue(o.breakdown, { usefulLifeYears: e.useful_life_years }),
             }
           : { problems: o.problems }),
       }));
@@ -55,6 +57,8 @@ export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
           warning: scored.filter((r) => r.warning).length,
         },
         levels: RECOMMENDATION_TEXT,
+        utilizationLevels: UTILIZATION_LEVELS,
+        disclaimer: ADVICE_DISCLAIMER,
         rows: out.sort((a, b) => (b.utilityScore ?? -1) - (a.utilityScore ?? -1)),
       };
     });
@@ -90,6 +94,8 @@ export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
         window: { from: year - WINDOW_YEARS + 1, to: year },
         formula: { version: f.version },
         outcome,
+        utilization: outcome.status === 'scored' ? utilizationFor(e, outcome.inputs.utilizationPct) : null,
+        assessment: outcome.status === 'scored' ? assessValue(outcome.breakdown, { usefulLifeYears: e.useful_life_years }) : null,
         rank: ranked.find((r) => r.equipment.id === id)?.rank ?? null,
         rankOf: ranked.length,
         annual: annualSeries(e, recs, f.fs),

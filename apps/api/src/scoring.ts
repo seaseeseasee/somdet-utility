@@ -3,9 +3,10 @@ import {
   annualMetrics,
   computeAnnualScore,
   computeScore,
-  FORMULA_SETS,
+  formulaSetFromDefinition,
   IncompleteDataError,
   rankScores,
+  utilizationAdvice,
   type AnnualInput,
   type FormulaSet,
   type ScoreBreakdown,
@@ -13,19 +14,23 @@ import {
 import { rowToBody } from './annual.js';
 import type { Db } from './db.js';
 import { HttpError } from './errors.js';
-import { currentYearOf, formulaSetOf } from './utility/score.js';
-import { activeSettings } from './utility/settings.js';
 
 /** ช่วงวิเคราะห์ย้อนหลัง (ปีงบ) */
 export const WINDOW_YEARS = 5;
 
-export async function currentFormulaSet(db: Db): Promise<{ id: string; version: string; fs: FormulaSet }> {
-  const r = (await db.query("SELECT id, version FROM formula_set WHERE status = 'approved' ORDER BY approved_at DESC LIMIT 1")).rows[0];
+/** ชุดสูตรที่ใช้อยู่ (สร้างจาก definition ในฐานข้อมูล) — ใช้ทั้งข้อมูลรายปีและข้อมูลที่นำเข้าจาก Excel */
+export async function currentFormulaSet(db: Db): Promise<{ id: string; version: string; fs: FormulaSet; definition: Record<string, unknown> }> {
+  const r = (await db.query("SELECT id, version, definition FROM formula_set WHERE status = 'approved' ORDER BY approved_at DESC LIMIT 1")).rows[0];
   if (!r) throw new HttpError(500, 'ยังไม่มีชุดสูตรที่อนุมัติ');
-  const fs = FORMULA_SETS[r.version];
-  if (!fs) throw new HttpError(500, `ชุดสูตร ${r.version} ยังไม่มีในโปรแกรมคำนวณ`);
-  return { id: r.id, version: r.version, fs };
+  try {
+    return { id: r.id, version: r.version, fs: formulaSetFromDefinition(r.version, r.definition), definition: r.definition };
+  } catch (e) {
+    throw new HttpError(500, (e as Error).message);
+  }
 }
+
+/** ปีปัจจุบันที่ใช้คิดอายุเครื่องของข้อมูลสะสมจาก Excel */
+export const importYearOf = (fs: FormulaSet, now = new Date()) => fs.currentYearBe ?? now.getFullYear() + 543;
 
 export function toAnnualInput(row: Record<string, unknown>): AnnualInput {
   const b = rowToBody(row) as unknown as Record<string, unknown>;
@@ -91,15 +96,22 @@ export function annualSeries(e: EquipmentLite, rows: Record<string, unknown>[], 
     });
 }
 
+/** ประเภทครุภัณฑ์ที่ถือเป็นอุปกรณ์ช่วยชีวิต/สำรองฉุกเฉิน — ใช้น้อยไม่ใช่เหตุผลให้โอนย้ายหรือจำหน่าย */
+export const CRITICAL_TYPES = ['ช่วยชีวิต'];
+
+/** ระดับ Utilization และข้อเสนอแนะของครุภัณฑ์ (null = ไม่มีข้อมูลหรือข้อมูลผิดปกติ) */
+export const utilizationFor = (e: Pick<EquipmentLite, 'type_name'>, pct: number | null | undefined) =>
+  utilizationAdvice(pct, { critical: CRITICAL_TYPES.includes(e.type_name ?? '') });
+
 export const EQ_SELECT = `SELECT e.id, e.hospital_id, h.name AS hospital_name, e.code, e.name, d.name AS department_name, t.name AS type_name,
     e.purchase_year_be, e.purchase_price, e.useful_life_years, e.status, e.department_id, e.type_id
   FROM equipment e JOIN hospital h ON h.id = e.hospital_id JOIN department d ON d.id = e.department_id JOIN equipment_type t ON t.id = e.type_id`;
 
 /**
  * ครุภัณฑ์ที่ยังไม่มีข้อมูลรายปีที่ยืนยันแล้ว แต่มีข้อมูลสะสมจากไฟล์ Excel (ข้อมูลครบ) → ใช้คะแนนจากไฟล์
- * คำนวณด้วยชุดน้ำหนักของข้อมูลนำเข้า (scoring_settings) เหมือนหน้าผลนำเข้า
+ * คำนวณด้วยชุดสูตรเดียวกับข้อมูลรายปี โดยอายุเครื่องคิดจากปีปัจจุบันของชุดสูตร (สมมติฐาน!B11)
  */
-async function applyImported(db: Db, rows: { equipment: EquipmentLite; outcome: ScoreOutcome }[]) {
+async function applyImported(db: Db, rows: { equipment: EquipmentLite; outcome: ScoreOutcome }[], fs: FormulaSet) {
   const ids = rows.filter((r) => r.outcome.status === 'no_data').map((r) => r.equipment.id);
   if (!ids.length) return;
   const imported = (
@@ -111,9 +123,7 @@ async function applyImported(db: Db, rows: { equipment: EquipmentLite; outcome: 
     )
   ).rows;
   if (!imported.length) return;
-  const settings = await activeSettings(db);
-  const fs = formulaSetOf(settings);
-  const year = currentYearOf(settings);
+  const year = importYearOf(fs);
   for (const row of rows) {
     const x = imported.find((i) => i.equipment_id === row.equipment.id);
     if (!x) continue;
@@ -149,7 +159,7 @@ export async function scoreAll(db: Db, year: number, fs: FormulaSet, f: { hospit
     ? (await db.query('SELECT * FROM annual_record WHERE equipment_id = ANY($1) AND fiscal_year_be BETWEEN $2 AND $3', [eq.map((e) => e.id), year - WINDOW_YEARS + 1, year])).rows
     : [];
   const rows = eq.map((e) => ({ equipment: e, outcome: scoreFromRecords(e, recs.filter((r) => r.equipment_id === e.id), year, fs) }));
-  await applyImported(db, rows);
+  await applyImported(db, rows, fs);
   const byHospital = new Map<string, typeof rows>();
   for (const r of rows) if (r.outcome.status === 'scored') byHospital.set(r.equipment.hospital_id, [...(byHospital.get(r.equipment.hospital_id) ?? []), r]);
   const rank = new Map<string, number>();

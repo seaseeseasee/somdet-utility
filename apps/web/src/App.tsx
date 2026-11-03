@@ -10,6 +10,7 @@ import { Network } from './pages/Network';
 import { Registry } from './pages/Registry';
 import { Reports } from './pages/Reports';
 import { Scores } from './pages/Scores';
+import { FormulaSettings } from './pages/FormulaSettings';
 import { Users } from './pages/Users';
 import { UtilityImport } from './pages/UtilityImport';
 
@@ -27,6 +28,7 @@ function Guarded() {
         <Route path="equipment/:id/edit" element={<EquipmentForm />} />
         <Route path="equipment/:id/annual/:year" element={<AnnualForm />} />
         <Route path="users" element={<Users />} />
+        <Route path="formula" element={<FormulaSettings />} />
         <Route path="network" element={me.scope === 'all' ? <Network /> : <Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="scores" element={<Scores />} />

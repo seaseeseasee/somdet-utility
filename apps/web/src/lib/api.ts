@@ -89,12 +89,20 @@ export interface Breakdown {
   formulaVersion: string; ageYears: number; paybackDivisorYears: number; costPerCase: number | null; paybackYears: number | null;
   scores: FactorScores; weighted: FactorScores; utilityScore: number; recommendation: string; recommendationText: string; warning: boolean; explanation: string[];
 }
+/** ระดับ Utilization 1–5 และข้อเสนอแนะการใช้งาน */
+export interface UtilAdvice { level: 1 | 2 | 3 | 4 | 5; label: string; range: string; advice: string; critical: boolean }
+/** ผลประเมินความคุ้มค่า (เกณฑ์เสริม) */
+export interface ValueAssessment {
+  level: 'very_worth' | 'worth' | 'watch' | 'not_worth'; label: string; range: string; advice: string;
+  dimensions: { key: string; label: string; score: number; status: 'ok' | 'watch' | 'low' | 'insufficient'; meaning?: string; actions?: string }[];
+  flags: { severity: 'red' | 'info'; rule: string; text: string }[];
+}
 export interface ScoreRow {
   equipment: { id: string; code: string; name: string; hospitalId: string; hospitalName: string; department: string; type: string; purchaseYear: number; purchasePrice: number; status: string };
   status: 'scored' | 'no_data' | 'incomplete'; dataYears: number[]; rank: number | null;
   utilityScore?: number; scores?: FactorScores; paybackYears?: number | null; costPerCase?: number | null;
   recommendation?: string; recommendationText?: string; warning?: boolean; utilizationPct?: number; problems?: string[];
-  source?: 'annual' | 'excel';
+  source?: 'annual' | 'excel'; utilization?: UtilAdvice | null; assessment?: ValueAssessment;
 }
 export interface ScoreList {
   year: number; window: { from: number; to: number }; formula: { version: string };
@@ -104,7 +112,7 @@ export interface ScoreList {
 export interface ScoreDetail {
   year: number; window: { from: number; to: number }; formula: { version: string };
   outcome: { status: 'scored'; breakdown: Breakdown; inputs: Record<string, number | boolean>; years: number[]; source: 'annual' | 'excel'; imported?: { filename: string; uploadedAt: string; sheet: string; sourceRow: number } } | { status: 'no_data' | 'incomplete'; problems: string[]; years: number[] };
-  rank: number | null; rankOf: number;
+  rank: number | null; rankOf: number; utilization: UtilAdvice | null; assessment: ValueAssessment | null;
   annual: { fiscalYear: number; status: string; confirmed: boolean; metrics: { maintenanceCost: number; utilizationPctHours: number | null; downtimePct: number | null } | null; revenue: number | null; caseCount: number | null; annualScore: number | null }[];
   history: { analysis_year: number; utility_score: number; recommendation: string; warning: boolean; rank: number | null; computed_at: string; formula_version: string }[];
 }
@@ -115,7 +123,7 @@ export interface HospitalDashboard {
   kpis: { equipment: number; totalValue: number; scored: number; averageScore: number | null; high: number; replace: number; warning: number; maintenanceTotal: number };
   totals: (YearPoint & { records: number })[];
   equipment: { id: string; code: string; name: string; hospitalName: string; department: string; purchasePrice: number; rank: number | null; status: string;
-    utilityScore: number | null; recommendation: string | null; recommendationText: string | null; warning: boolean; scores: FactorScores | null; series: YearPoint[] }[];
+    utilityScore: number | null; recommendation: string | null; recommendationText: string | null; warning: boolean; scores: FactorScores | null; utilization: UtilAdvice | null; source: 'annual' | 'excel' | null; series: YearPoint[] }[];
 }
 export interface NetworkDashboard {
   year: number; window: { from: number; to: number }; formula: { version: string };

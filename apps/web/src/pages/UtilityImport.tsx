@@ -4,7 +4,7 @@ import { api, ApiError, type Option } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { thDate } from '../lib/format';
 import { f2, ScoreBadge } from '../lib/score';
-import { ImportHistory, ImportSettings } from './ImportSettings';
+import { ImportHistory } from './ImportHistory';
 
 type Status = 'ok' | 'warning' | 'incomplete' | 'error';
 interface PRow {
@@ -80,7 +80,7 @@ export function UtilityImport() {
       <div className="note blue">
         นำเข้าไฟล์ .xlsx ตามแบบฟอร์ม Utility Analysis (หัวตารางแถว 3) ระบบคำนวณคะแนนใหม่เองทุกแถว ไม่ใช้ค่าที่สูตรในไฟล์คำนวณไว้ ·{' '}
         แถวที่มีปีที่ซื้อและราคาจะถูกสร้างเป็นครุภัณฑ์ในทะเบียน ช่องที่ไฟล์ไม่มี (รหัส ยี่ห้อ รุ่น Serial หน่วยงาน) เป็นค่าชั่วคราวให้แก้ภายหลัง ·{' '}
-        <a href="/api/utility/template" download>ดาวน์โหลดแบบฟอร์มเปล่า</a> · <Link to="/equipment">กลับไปทะเบียนครุภัณฑ์</Link>
+        คะแนนคิดด้วย<Link to="/formula">สมมติฐานและน้ำหนักคะแนน</Link>ของระบบ (ชุดเดียวกับข้อมูลรายปี) · <a href="/api/utility/template" download>ดาวน์โหลดแบบฟอร์มเปล่า</a> · <Link to="/equipment">กลับไปทะเบียนครุภัณฑ์</Link>
       </div>
       {msg && <div className={`note ${msg.tone}`} role="status">{msg.text}</div>}
       {done && (
@@ -182,7 +182,6 @@ export function UtilityImport() {
         </>
       )}
 
-      <ImportSettings refreshKey={done} />
       <ImportHistory refreshKey={done} />
     </div>
   );

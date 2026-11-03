@@ -1,10 +1,10 @@
-import { FORMULA_SETS, RECOMMENDATION_TEXT, type ScoreBreakdown } from '@mu/formula';
+import { RECOMMENDATION_TEXT, type ScoreBreakdown, type UtilizationAdvice } from '@mu/formula';
 import { z } from 'zod';
 import { fiscalYearOf, rowToBody } from '../annual.js';
 import type { CurrentUser } from '../auth.js';
 import type { Db } from '../db.js';
 import { HttpError } from '../errors.js';
-import { currentFormulaSet, scoreAll, WINDOW_YEARS } from '../scoring.js';
+import { currentFormulaSet, scoreAll, utilizationFor, WINDOW_YEARS } from '../scoring.js';
 
 export const SECTIONS = ['kpi', 'chart', 'ranking', 'factors', 'annual', 'method'] as const;
 export type Section = (typeof SECTIONS)[number];
@@ -34,6 +34,9 @@ export interface ReportRow {
   purchasePrice: number; years: number[]; breakdown: ScoreBreakdown;
   /** ที่มาของข้อมูลที่ใช้คิดคะแนน: ปีงบที่ยืนยันแล้ว หรือข้อมูลสะสมจากไฟล์ Excel */
   basis: string;
+  utilizationPct: number;
+  /** ระดับ Utilization 1–5 และข้อเสนอแนะการใช้งาน (null = ข้อมูลผิดปกติ) */
+  utilization: UtilizationAdvice | null;
 }
 export interface ReportData {
   title: string; subtitle: string; scopeLabel: string; year: number; window: { from: number; to: number };
@@ -52,8 +55,7 @@ export interface ReportData {
 export async function buildReportData(db: Db, u: CurrentUser, q: ReportQuery): Promise<ReportData> {
   const year = q.year ?? fiscalYearOf(new Date()) - 1;
   const f = await currentFormulaSet(db);
-  const def = (await db.query('SELECT definition FROM formula_set WHERE id = $1', [f.id])).rows[0]?.definition ?? {};
-  if (!FORMULA_SETS[f.version]) throw new HttpError(500, 'ไม่พบชุดสูตร');
+  const def = f.definition;
   const all = await scoreAll(db, year, f.fs, { hospitalId: q.hospitalId, departmentId: q.departmentId });
   let scope = 'ทุกโรงพยาบาลในเครือข่าย';
   if (q.hospitalId || u.hospitalId) {
@@ -73,7 +75,8 @@ export async function buildReportData(db: Db, u: CurrentUser, q: ReportQuery): P
     if (r.outcome.status === 'scored')
       rows.push({ rank: r.rank, hospital: e.hospital_name ?? '', code: e.code, name: e.name, department: e.department_name ?? '', type: e.type_name ?? '',
         purchaseYear: e.purchase_year_be, purchasePrice: e.purchase_price, years: r.outcome.years, breakdown: r.outcome.breakdown,
-        basis: r.outcome.source === 'excel' ? 'ข้อมูลสะสมจากไฟล์ Excel' : r.outcome.years.join(', ') });
+        basis: r.outcome.source === 'excel' ? 'ข้อมูลสะสมจากไฟล์ Excel' : r.outcome.years.join(', '),
+        utilizationPct: r.outcome.inputs.utilizationPct, utilization: utilizationFor(e, r.outcome.inputs.utilizationPct) });
     else notScored.push({ hospital: e.hospital_name ?? '', code: e.code, name: e.name, reason: r.outcome.problems.slice(0, 2).join(' · ') });
   }
   const cmp: Record<ReportQuery['sort'], (a: ReportRow, b: ReportRow) => number> = {

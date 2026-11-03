@@ -5,7 +5,7 @@ import { fiscalYearOf, rowToBody } from '../annual.js';
 import { requirePerm } from '../auth.js';
 import { withTx } from '../db.js';
 import { HttpError } from '../errors.js';
-import { currentFormulaSet, scoreAll, toAnnualInput, WINDOW_YEARS } from '../scoring.js';
+import { currentFormulaSet, scoreAll, toAnnualInput, utilizationFor, WINDOW_YEARS } from '../scoring.js';
 import type { AppDeps } from '../app.js';
 
 const Uuid = z.string().uuid();
@@ -91,6 +91,8 @@ export async function dashboardRoutes(app: FastifyInstance, { pool }: AppDeps) {
             recommendation: r.outcome.status === 'scored' ? r.outcome.breakdown.recommendation : null,
             recommendationText: r.outcome.status === 'scored' ? r.outcome.breakdown.recommendationText : null,
             warning: r.outcome.status === 'scored' ? r.outcome.breakdown.warning : false,
+            utilization: r.outcome.status === 'scored' ? utilizationFor(r.equipment, r.outcome.inputs.utilizationPct) : null,
+            source: r.outcome.status === 'scored' ? r.outcome.source : null,
             scores: r.outcome.status === 'scored' ? r.outcome.breakdown.scores : null,
             series: yearly(recs.filter((x) => x.equipment_id === r.equipment.id), years).map(({ records: _r, ...s }) => s),
           }))

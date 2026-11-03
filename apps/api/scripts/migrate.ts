@@ -30,7 +30,9 @@ export async function migrate(adminUrl: string, appPassword: string, log = conso
       GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO mu_app;
       GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO mu_app;
       REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM mu_app;
-      REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON formula_set, schema_migration FROM mu_app;`);
+      REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON schema_migration FROM mu_app;
+      REVOKE UPDATE, DELETE, TRUNCATE ON formula_set FROM mu_app;
+      GRANT UPDATE (status) ON formula_set TO mu_app;`);
     log('migration เสร็จสิ้น');
   } catch (e) {
     await c.query('ROLLBACK').catch(() => undefined);

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { ADVICE_DISCLAIMER } from '@mu/formula';
 import { REC, SECTION_LABEL, thaiDate, type ReportData } from './data.js';
 
 const require = createRequire(import.meta.url);
@@ -79,10 +80,12 @@ export function renderReportHtml(d: ReportData): string {
     ].map(([l, v, s]) => `<div class="kpi"><div class="l">${esc(l)}</div><div class="v">${esc(v)}</div><div class="s">${esc(s)}</div></div>`).join('')}
   </div>`;
   const ranking = `<h2>ตารางจัดอันดับและข้อเสนอแนะ</h2>
-    <table><thead><tr><th class="c">อันดับ</th><th>รายการ</th>${multi ? '<th>โรงพยาบาล</th>' : ''}<th>หน่วยงาน</th><th class="r">ราคา (บาท)</th><th class="c">Score</th><th>ข้อเสนอแนะ</th></tr></thead>
+    <table><thead><tr><th class="c">อันดับ</th><th>รายการ</th>${multi ? '<th>โรงพยาบาล</th>' : ''}<th>หน่วยงาน</th><th class="r">ราคา (บาท)</th><th class="c">Score</th><th>ข้อเสนอแนะ</th><th>ระดับการใช้งาน (Utilization)</th></tr></thead>
     <tbody>${d.rows.map((r) => `<tr><td class="c">${r.rank ?? '—'}</td><td><b>${esc(r.name)}</b><br><span class="m">${esc(r.code)}${r.breakdown.warning ? ' · <span class="warn">ธงเตือน</span>' : ''}</span></td>${multi ? `<td>${esc(r.hospital)}</td>` : ''}<td>${esc(r.department)}</td><td class="r">${baht(r.purchasePrice)}</td>
-      <td class="c"><span class="sc" style="background:${BAND_BG[r.breakdown.recommendation]};color:${BAND[r.breakdown.recommendation]}">${n(r.breakdown.utilityScore)}</span></td><td>${esc(r.breakdown.recommendationText)}</td></tr>`).join('')}</tbody></table>
-    ${multi ? '<p class="note">อันดับคิดภายในแต่ละโรงพยาบาล</p>' : ''}`;
+      <td class="c"><span class="sc" style="background:${BAND_BG[r.breakdown.recommendation]};color:${BAND[r.breakdown.recommendation]}">${n(r.breakdown.utilityScore)}</span></td><td>${esc(r.breakdown.recommendationText)}</td>
+      <td>${r.utilization ? `<b>ระดับ ${r.utilization.level} ${esc(r.utilization.label)}</b> (${n(r.utilizationPct, 2)}%)<br><span class="m">${esc(r.utilization.advice)}</span>` : '<span class="m">ข้อมูลไม่พอจัดระดับ</span>'}</td></tr>`).join('')}</tbody></table>
+    ${multi ? '<p class="note">อันดับคิดภายในแต่ละโรงพยาบาล</p>' : ''}
+    <p class="note">ระดับการใช้งาน: 5 ≥ 80% · 4 60–79.99% · 3 40–59.99% · 2 20–39.99% · 1 &lt; 20% · ${esc(ADVICE_DISCLAIMER)}</p>`;
   const factors = `<h2>คะแนนแยก 6 ปัจจัย</h2>
     <table class="sm"><thead><tr><th>รายการ</th><th class="r">Utilization<br>25%</th><th class="r">Clinical<br>20%</th><th class="r">Financial<br>20%</th><th class="r">Reliability<br>15%</th><th class="r">Satisfaction<br>10%</th><th class="r">Strategic<br>10%</th><th class="r">Payback<br>(ปี)</th><th class="r">ต้นทุน/เคส<br>(บาท)</th><th class="r">Utility<br>Score</th><th>ปีงบที่ใช้</th></tr></thead>
     <tbody>${d.rows.map((r) => { const s = r.breakdown.scores; return `<tr><td>${esc(r.code)}<br><span class="m">${esc(r.name)}</span></td>

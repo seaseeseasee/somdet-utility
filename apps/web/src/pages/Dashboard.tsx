@@ -5,7 +5,7 @@ import { api, type HospitalDashboard, type Option } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { BAND_COLOR, ChartView, COLORS, grid, millions, SERIES } from '../lib/chart';
 import { baht, CURRENT_BE_YEAR } from '../lib/format';
-import { f1, FACTORS, RecChip, ScoreBadge } from '../lib/score';
+import { f1, FACTORS, RecChip, ScoreBadge, UtilChip } from '../lib/score';
 
 const PRICE: [string, string, string?][] = [['', 'ทุกช่วงราคา'], ['1000000', '≥ 1 ล้านบาท'], ['1000000-5000000', '1–5 ล้านบาท'], ['5000000-20000000', '5–20 ล้านบาท'], ['20000000', '> 20 ล้านบาท']];
 const LEVEL: [string, string][] = [['', 'ทุกระดับ'], ['high', '80–100'], ['good', '60–79'], ['medium', '40–59'], ['low', '< 40'], ['none', 'ยังไม่มีคะแนน']];
@@ -112,6 +112,15 @@ export function Dashboard() {
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length >= 3 ? [...p.slice(1), id] : [...p, id]));
   const k = d?.kpis;
   const noData = d && !scored.length;
+  // กราฟย้อนหลังใช้ข้อมูลรายปีที่ยืนยันแล้วเท่านั้น (ข้อมูลจากไฟล์ Excel เป็นค่าสะสม ไม่มีรายปี)
+  const hasTrend = Boolean(d?.totals.some((t) => t.records > 0));
+  const fromExcel = scored.filter((e) => e.source === 'excel').length;
+  const noTrend = (
+    <div className="empty" style={{ height: 220, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6, fontSize: 13.5 }}>
+      <b>ยังไม่มีข้อมูลรายปีที่ยืนยันแล้วในปีงบ {d?.window.from}–{d?.window.to}</b>
+      <span>{fromExcel > 0 ? `ครุภัณฑ์ ${fromExcel} รายการใช้ข้อมูลสะสมจากไฟล์ Excel ซึ่งไม่แยกรายปี จึงแสดงเป็นแนวโน้มไม่ได้ · ` : ''}กราฟจะแสดงเมื่อกรอกข้อมูลรายปีและยืนยันแล้ว</span>
+    </div>
+  );
 
   return (
     <>
@@ -161,9 +170,9 @@ export function Dashboard() {
               <ChartView config={cfg.radar} height={300} label="กราฟเรดาร์เปรียบเทียบคะแนน 6 ปัจจัย" /></div>
           </div>
           <div className="dash-row r3">
-            <div className="card"><h3>Utilization Rate ย้อนหลัง 5 ปี</h3><div className="sub">เส้นทึบ = รวมทุกรายการ (ถ่วงน้ำหนักชั่วโมง) · เส้นประ = รายการที่เลือก</div><ChartView config={cfg.util} height={220} label="กราฟ Utilization ย้อนหลัง 5 ปี" /></div>
-            <div className="card"><h3>ค่าบำรุงรักษาย้อนหลัง 5 ปี</h3><div className="sub">บาท/ปี รวมทุกรายการ</div><ChartView config={cfg.maint} height={220} label="กราฟค่าบำรุงรักษาย้อนหลัง 5 ปี" /></div>
-            <div className="card"><h3>Downtime ย้อนหลัง 5 ปี</h3><div className="sub">% ของชั่วโมงพร้อมใช้งาน</div><ChartView config={cfg.down} height={220} label="กราฟ Downtime ย้อนหลัง 5 ปี" /></div>
+            <div className="card"><h3>Utilization Rate ย้อนหลัง 5 ปี</h3><div className="sub">เส้นทึบ = รวมทุกรายการ (ถ่วงน้ำหนักชั่วโมง) · เส้นประ = รายการที่เลือก</div>{hasTrend ? <ChartView config={cfg.util} height={220} label="กราฟ Utilization ย้อนหลัง 5 ปี" /> : noTrend}</div>
+            <div className="card"><h3>ค่าบำรุงรักษาย้อนหลัง 5 ปี</h3><div className="sub">บาท/ปี รวมทุกรายการ</div>{hasTrend ? <ChartView config={cfg.maint} height={220} label="กราฟค่าบำรุงรักษาย้อนหลัง 5 ปี" /> : noTrend}</div>
+            <div className="card"><h3>Downtime ย้อนหลัง 5 ปี</h3><div className="sub">% ของชั่วโมงพร้อมใช้งาน</div>{hasTrend ? <ChartView config={cfg.down} height={220} label="กราฟ Downtime ย้อนหลัง 5 ปี" /> : noTrend}</div>
           </div>
           <div className="dash-row r32">
             <div className="card flush">
@@ -179,14 +188,14 @@ export function Dashboard() {
                       <td><Link to={`/equipment/${e.id}`} style={{ fontWeight: 600, color: 'var(--ink)', textDecoration: 'none' }}>{e.name}</Link><div className="muted">{e.code} · {e.department}</div></td>
                       {central && <td>{e.hospitalName}</td>}
                       <td className="c"><ScoreBadge v={e.utilityScore!} /></td>
-                      <td><div className="hrow" style={{ gap: 6, flexWrap: 'nowrap' }}><div className="mini-bar" style={{ width: 70 }}><span style={{ width: `${Math.min(100, u)}%` }} /></div><span className="muted num">{f1(u)}%</span></div></td>
+                      <td><div className="hrow" style={{ gap: 6, flexWrap: 'nowrap' }}><div className="mini-bar" style={{ width: 70 }}><span style={{ width: `${Math.min(100, u)}%` }} /></div><span className="muted num">{f1(u)}%</span><UtilChip u={e.utilization} /></div></td>
                       <td><RecChip level={e.recommendation!} text={e.recommendationText!} /></td>
                     </tr>
                   );
                 })}</tbody>
               </table></div>
             </div>
-            <div className="card"><h3>รายได้เทียบกับค่าบำรุงรักษา</h3><div className="sub">บาท/ปี รวมทุกรายการ · ยังไม่รวมค่าเสื่อมราคา</div><ChartView config={cfg.rev} height={300} label="กราฟรายได้เทียบค่าบำรุงรักษา" /></div>
+            <div className="card"><h3>รายได้เทียบกับค่าบำรุงรักษา</h3><div className="sub">บาท/ปี รวมทุกรายการ · ยังไม่รวมค่าเสื่อมราคา</div>{hasTrend ? <ChartView config={cfg.rev} height={300} label="กราฟรายได้เทียบค่าบำรุงรักษา" /> : noTrend}</div>
           </div>
         </>
       )}

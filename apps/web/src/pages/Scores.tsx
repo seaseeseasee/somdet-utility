@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, type Option, type ScoreDetail, type ScoreList, type ScoreRow } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { baht, CURRENT_BE_YEAR } from '../lib/format';
-import { f1, f2, FACTORS, RecChip, ScoreBadge } from '../lib/score';
+import { ADVICE_DISCLAIMER, f1, f2, FACTORS, RecChip, ScoreBadge, UtilChip, ValueChip } from '../lib/score';
 
 const LEVELS: [string, string][] = [['', 'ทุกระดับ'], ['high', '80–100 ซื้อเพิ่ม/อัปเกรด'], ['good', '60–79 คงสภาพ'], ['medium', '40–59 ทบทวนแผน'], ['low', '< 40 พิจารณาทดแทน']];
 
@@ -18,6 +18,26 @@ export function Breakdown({ equipmentId, year }: { equipmentId: string; year: nu
     <div className="stack" style={{ gap: 8 }}>
       <div className="hrow"><span className="score big num" style={{ color: 'var(--navy)' }}>{f2(b.utilityScore)}</span><RecChip level={b.recommendation} text={b.recommendationText} /></div>
       {b.warning && <div className="note red" style={{ padding: '6px 10px' }}>ธงเตือน: Utilization &lt; 40% หรือ Score &lt; 50 (D-12)</div>}
+      <div className="note" style={{ padding: '8px 10px' }}>
+        <div className="hrow" style={{ gap: 6 }}><b>ข้อเสนอแนะด้านการใช้งาน</b><UtilChip u={d.utilization} />
+          {d.utilization && <span className="muted num">Utilization {f2(Number(d.outcome.inputs.utilizationPct))}% ({d.utilization.range})</span>}</div>
+        <div>{d.utilization?.advice ?? 'ไม่มีข้อมูล Utilization ที่ใช้จัดระดับได้'}</div>
+        <div className="muted" style={{ fontSize: 12 }}>{ADVICE_DISCLAIMER}</div>
+      </div>
+      {d.assessment && (
+        <div className="note" style={{ padding: '8px 10px' }}>
+          <div className="hrow" style={{ gap: 6 }}><b>ผลประเมินความคุ้มค่า (เกณฑ์เสริม)</b><ValueChip a={d.assessment} /><span className="muted">คะแนนรวม {d.assessment.range}</span></div>
+          <div>{d.assessment.advice}</div>
+          {d.assessment.flags.map((f) => <div key={f.rule + f.text} className={f.severity === 'red' ? 'hint e' : 'muted'} style={{ fontSize: 13 }}>{f.severity === 'red' ? '⚑ ' : ''}{f.text}</div>)}
+          {d.assessment.dimensions.filter((x) => x.status === 'low' || x.status === 'watch').map((x) => (
+            <div key={x.key} style={{ fontSize: 13, marginTop: 4 }}>
+              <span className={`chip ${x.status === 'low' ? 'r' : 'w'}`}>{x.label} {f1(x.score)} · {x.status === 'low' ? 'ต่ำ' : 'เฝ้าระวัง'}</span> {x.meaning} → {x.actions}
+            </div>
+          ))}
+          {d.assessment.dimensions.some((x) => x.status === 'insufficient') && <div className="muted" style={{ fontSize: 13 }}>Financial: ข้อมูลไม่เพียงพอ (ไม่ประเมินรายมิติ)</div>}
+          <div className="muted" style={{ fontSize: 12 }}>เกณฑ์เสริม: คะแนนรวม ≥ 80 / 65–79 / 50–64 / &lt; 50 · รายมิติต่ำ &lt; 50, เฝ้าระวัง 50–59 · ไม่แสดงในรายงานผู้บริหาร</div>
+        </div>
+      )}
       {FACTORS.map(([k, label, w]) => (
         <div className="calc-line" key={k}>
           <span>{label} Score <span className="muted">× {w}</span></span>
@@ -104,7 +124,7 @@ export function Scores() {
               <thead><tr>
                 <th className="c">อันดับ</th><th>ครุภัณฑ์</th>
                 {FACTORS.map(([k, l, w]) => <th key={k} className="r">{l}<br /><span className="muted">{w * 100}%</span></th>)}
-                <th className="r">Payback<br />(ปี)</th><th className="c">Utility<br />Score</th>
+                <th className="r">Payback<br />(ปี)</th><th className="c">Utility<br />Score</th><th>ระดับการใช้งาน</th><th>ความคุ้มค่า<br /><span className="muted">(เกณฑ์เสริม)</span></th>
               </tr></thead>
               <tbody>
                 {scored.map((r: ScoreRow) => (
@@ -118,6 +138,8 @@ export function Scores() {
                     {FACTORS.map(([k]) => <td key={k} className="r num">{f1(r.scores?.[k])}</td>)}
                     <td className="r num">{r.paybackYears === null ? <span className="muted">N/A</span> : f2(r.paybackYears)}</td>
                     <td className="c" title={r.recommendationText}><ScoreBadge v={r.utilityScore!} /></td>
+                    <td><UtilChip u={r.utilization} /></td>
+                    <td><ValueChip a={r.assessment} /></td>
                   </tr>
                 ))}
               </tbody>

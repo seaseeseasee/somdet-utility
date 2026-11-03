@@ -115,4 +115,33 @@ describe('Utility Score จากข้อมูลรายปี', () => {
     expect(r.summary.average).toBeCloseTo((row(r, 'DEMO-001').utilityScore + row(r, 'DEMO-008').utilityScore) / 2, 9);
   });
 
+  it('ระดับ Utilization และข้อเสนอแนะการใช้งาน; อุปกรณ์ช่วยชีวิตที่ใช้น้อยไม่ถูกแนะนำให้โอนย้ายหรือจำหน่าย', async () => {
+    // DEMO-001: 780 ÷ 1000 ชม. = 78% → ระดับ 4
+    expect(row(await scores(), 'DEMO-001').utilization).toMatchObject({ level: 4, label: 'ใช้งานสูง', critical: false });
+    // DEMO-003 Ventilator (ประเภทช่วยชีวิต) ใช้งาน 100 ÷ 1000 ชม. = 10% → ระดับ 1 แต่ใช้ข้อเสนอแนะของอุปกรณ์สำรอง
+    // (ปี Y ของ DEMO-003 เป็นร่างจากเทสต์ก่อนหน้า จึงใส่ข้อมูลยืนยันไว้ที่ปี Y−1)
+    await approved('DEMO-003', Y - 1, { actual_hours: 100 });
+    const v = row(await scores(), 'DEMO-003');
+    expect(v.utilization).toMatchObject({ level: 1, critical: true });
+    expect(v.utilization.advice).toMatch(/ไม่ใช้ระดับ Utilization เป็นเหตุผลโอนย้ายหรือจำหน่าย/);
+    expect(v.utilization.advice).not.toMatch(/พิจารณาโอนย้ายหรือจำหน่ายตามระเบียบ/);
+    expect((await S.aEntry!.get(`/api/equipment/${eq['DEMO-003']}/score?year=${Y}`)).json().utilization.level).toBe(1);
+    const html = (await S.aEntry!.get(`/api/reports/executive/preview?year=${Y}`)).body;
+    expect(html).toContain('ระดับการใช้งาน (Utilization)');
+    expect(html).toContain('ระดับ 4 ใช้งานสูง');
+    expect(html).toContain('ไม่ใช่การตัดสินใจอัตโนมัติ');
+  });
+
+  it('ผลประเมินความคุ้มค่า (เกณฑ์เสริม) แสดงในหน้าผลวิเคราะห์ แต่ไม่อยู่ในรายงานผู้บริหาร', async () => {
+    const r = row(await scores(), 'DEMO-001');
+    // 75.536 → 65–79 "คุ้มค่า"; DEMO-001 ไม่มีอายุการใช้งานตามเกณฑ์ → แจ้งว่าเทียบ Payback ไม่ได้
+    expect(r.assessment).toMatchObject({ level: 'worth', label: 'คุ้มค่า', advice: 'คงใช้ต่อ ติดตามตามรอบปกติ' });
+    expect(r.assessment.flags.map((f: { rule: string }) => f.rule)).toEqual(['no_useful_life']);
+    expect(r.assessment.dimensions).toHaveLength(6);
+    const d = (await S.aEntry!.get(`/api/equipment/${eq['DEMO-001']}/score?year=${Y}`)).json();
+    expect(d.assessment.level).toBe('worth');
+    const html = (await S.aEntry!.get(`/api/reports/executive/preview?year=${Y}`)).body;
+    for (const t of ['เกณฑ์เสริม', 'คุ้มค่ามาก', 'ต้องเฝ้าระวัง', 'ธงแดง']) expect(html).not.toContain(t);
+  });
+
 });

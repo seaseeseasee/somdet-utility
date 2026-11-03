@@ -189,3 +189,5 @@ button.kpi.sel { box-shadow: 0 0 0 2px var(--blue) inset; }
 .tbl tr.st-warning td { background: #fffaf0; }
 .tbl tr.st-incomplete td { color: var(--ink-3); }
 .hint.e { color: var(--bad); }
+
+.chip.o { background: #fdeee2; color: #b4541a; }

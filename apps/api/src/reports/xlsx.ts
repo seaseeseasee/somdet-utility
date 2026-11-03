@@ -53,10 +53,12 @@ export async function buildWorkbook(d: ReportData): Promise<Buffer> {
   const r = sheet(wb, 'จัดอันดับ', [
     ['อันดับ', 8], ['รหัส', 14], ['ชื่อครุภัณฑ์', 36], ...(multi ? [['โรงพยาบาล', 30] as [string, number]] : []), ['หน่วยงาน', 24], ['ประเภท', 18],
     ['ปีที่ซื้อ', 9], ['ราคาจัดซื้อ (บาท)', 16, '#,##0'], ['Utility Score', 12, '0.00'], ['ข้อเสนอแนะ', 34], ['ธงเตือน', 10],
+    ['Utilization (%)', 12, '0.00'], ['ระดับการใช้งาน', 18], ['ข้อเสนอแนะการใช้งาน', 60],
   ]);
   for (const x of d.rows) {
     const row = r.addRow([x.rank, x.code, x.name, ...(multi ? [x.hospital] : []), x.department, x.type, x.purchaseYear, x.purchasePrice,
-      x.breakdown.utilityScore, x.breakdown.recommendationText, x.breakdown.warning ? 'มี' : '']);
+      x.breakdown.utilityScore, x.breakdown.recommendationText, x.breakdown.warning ? 'มี' : '',
+      x.utilizationPct, x.utilization ? `${x.utilization.level} ${x.utilization.label}` : 'ข้อมูลไม่พอจัดระดับ', x.utilization?.advice ?? '']);
     row.getCell(multi ? 10 : 9).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BAND[x.breakdown.recommendation] } };
   }
   r.autoFilter = { from: 'A1', to: { row: 1, column: r.columnCount } };
