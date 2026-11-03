@@ -3,6 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, type Equipment, type Option, type Paged } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ageYears, baht, STATUS } from '../lib/format';
+import { useOptions } from '../lib/useApi';
+
+const PAGE_SIZE = 100;
 
 export function Registry() {
   const { me, can } = useAuth();
@@ -12,20 +15,19 @@ export function Registry() {
   const [dept, setDept] = useState('');
   const [hospital, setHospital] = useState('');
   const [pending, setPending] = useState(false);
-  const [depts, setDepts] = useState<Option[]>([]);
-  const [hospitals, setHospitals] = useState<Option[]>([]);
+  const [page, setPage] = useState(1);
   const [data, setData] = useState<Paged<Equipment> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const central = me?.scope === 'all';
+  const depts = useOptions('/api/departments');
+  const hospitals = useOptions(central ? '/api/hospitals' : null);
 
-  useEffect(() => {
-    api.get<Option[]>('/api/departments').then(setDepts).catch(() => undefined);
-    if (central) api.get<Option[]>('/api/hospitals').then(setHospitals).catch(() => undefined);
-  }, [central]);
+  // เปลี่ยนเงื่อนไขค้นหาแล้วกลับไปหน้าแรก
+  useEffect(() => setPage(1), [q, status, dept, hospital, pending]);
 
   useEffect(() => {
     const t = setTimeout(() => {
-      const p = new URLSearchParams({ pageSize: '200' });
+      const p = new URLSearchParams({ pageSize: String(PAGE_SIZE), page: String(page) });
       if (q) p.set('q', q);
       if (status) p.set('status', status);
       if (dept) p.set('departmentId', dept);
@@ -34,10 +36,12 @@ export function Registry() {
       api.get<Paged<Equipment>>(`/api/equipment?${p}`).then(setData, (e: Error) => setError(e.message));
     }, 200);
     return () => clearTimeout(t);
-  }, [q, status, dept, hospital, pending]);
+  }, [q, status, dept, hospital, pending, page]);
 
   const rows = data?.rows ?? [];
-  const count = (s: string[]) => rows.filter((r) => s.includes(r.status)).length;
+  // นับจากทุกรายการที่ตรงเงื่อนไข (API) ไม่ใช่เฉพาะหน้าที่แสดง
+  const count = (s: string[]) => s.reduce((n, k) => n + (data?.statusCounts?.[k] ?? 0), 0);
+  const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
   return (
     <>
       <div className="hrow between">
@@ -106,6 +110,16 @@ export function Registry() {
         {data && !rows.length && (
           <div className="empty">
             ยังไม่มีครุภัณฑ์ตามเงื่อนไขนี้{can('equipment.write') && <> · <Link to="/equipment/new">ลงทะเบียนครุภัณฑ์รายการแรก</Link></>}
+          </div>
+        )}
+        {data && pages > 1 && (
+          <div className="hrow between" style={{ padding: '10px 16px' }}>
+            <span className="muted num">แสดง {(data.page - 1) * data.pageSize + 1}–{Math.min(data.page * data.pageSize, data.total)} จาก {data.total} รายการ</span>
+            <div className="hrow">
+              <button type="button" className="btn sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>‹ ก่อนหน้า</button>
+              <span className="muted num">หน้า {page} / {pages}</span>
+              <button type="button" className="btn sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>ถัดไป ›</button>
+            </div>
           </div>
         )}
       </div>

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, type AnnualDetail, type Issue, type YearList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { baht, thDate } from '../lib/format';
+import { useFormulaVersion } from '../lib/useApi';
 
 type Form = Record<string, string | boolean>;
 type NumField = [key: string, label: string, unit: string, req?: boolean, hint?: string];
@@ -78,6 +79,7 @@ export function AnnualForm() {
   const [msg, setMsg] = useState<{ tone: string; text: string; list?: Issue[] } | null>(null);
   const [reason, setReason] = useState('');
   const [unlocking, setUnlocking] = useState(false);
+  const formulaVersion = useFormulaVersion();
   const [mx, setMx] = useState({ eventDate: '', kind: 'repair', detail: '', cost: '', workOrderNo: '' });
 
   const load = useCallback(async () => {
@@ -293,7 +295,7 @@ export function AnnualForm() {
         <div className="stack sticky">
           <div className="card stack">
             <h3>ค่าคำนวณอัตโนมัติ (ปี {fy})</h3>
-            <div className="muted">คำนวณจากข้อมูลที่บันทึกล่าสุด · ชุดสูตร v1.0 · ความครบถ้วน {ev?.completeness ?? 0}%</div>
+            <div className="muted">คำนวณจากข้อมูลที่บันทึกล่าสุด{formulaVersion && ` · ชุดสูตร v${formulaVersion}`} · ความครบถ้วน {ev?.completeness ?? 0}%</div>
             <div className="calc-line"><span>Utilization Rate</span><b className="num">{pct(m?.utilizationPctHours)}</b><span className="f">= ชม.ใช้จริง ÷ ชม.พร้อมใช้ × 100 (D-01)</span></div>
             <div className="calc-line"><span>Utilization (แบบวัน)</span><b className="num">{pct(m?.utilizationPctDays)}</b><span className="f">= วันใช้จริง ÷ วันพร้อมใช้ × 100 (แสดงประกอบ)</span></div>
             <div className="calc-line"><span>Availability Rate</span><b className="num">{pct(m?.availabilityPct)}</b><span className="f">= (วันพร้อมใช้ − วันหยุดซ่อม) ÷ วันพร้อมใช้ × 100</span></div>

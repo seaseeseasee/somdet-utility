@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { maintenanceCostOf, recommendationOf } from '@mu/formula';
 import { z } from 'zod';
+import { Uuid, YearBe } from '../validation.js';
 import { fiscalYearOf, rowToBody } from '../annual.js';
 import { requirePerm } from '../auth.js';
 import { withTx } from '../db.js';
@@ -8,8 +9,6 @@ import { HttpError } from '../errors.js';
 import { currentFormulaSet, scoreAll, toAnnualInput, utilizationFor, WINDOW_YEARS } from '../scoring.js';
 import type { AppDeps } from '../app.js';
 
-const Uuid = z.string().uuid();
-const Year = z.coerce.number().int().min(2500).max(2700);
 const CONFIRMED = ['approved', 'locked'];
 const range = (y: number) => Array.from({ length: WINDOW_YEARS }, (_, i) => y - WINDOW_YEARS + 1 + i);
 
@@ -37,7 +36,7 @@ export async function dashboardRoutes(app: FastifyInstance, { pool }: AppDeps) {
     const u = requirePerm(req, 'dashboard.view');
     const q = z
       .object({
-        year: Year.optional(), hospitalId: Uuid.optional(), departmentId: Uuid.optional(), typeId: Uuid.optional(),
+        year: YearBe.optional(), hospitalId: Uuid.optional(), departmentId: Uuid.optional(), typeId: Uuid.optional(),
         q: z.string().trim().max(100).optional(), minPrice: z.coerce.number().min(0).optional(), maxPrice: z.coerce.number().min(0).optional(),
         level: z.enum(['high', 'good', 'medium', 'low', 'none']).optional(),
       })
@@ -105,7 +104,7 @@ export async function dashboardRoutes(app: FastifyInstance, { pool }: AppDeps) {
   app.get('/api/dashboard/network', async (req) => {
     const u = requirePerm(req, 'dashboard.view');
     if (u.scope.scope !== 'all') throw new HttpError(403, 'Dashboard ภาพรวมเครือข่ายสำหรับผู้ใช้ส่วนกลางเท่านั้น');
-    const q = z.object({ year: Year.optional(), province: z.string().trim().max(100).optional(), typeId: Uuid.optional() }).parse(req.query);
+    const q = z.object({ year: YearBe.optional(), province: z.string().trim().max(100).optional(), typeId: Uuid.optional() }).parse(req.query);
     const year = q.year ?? fiscalYearOf(new Date()) - 1;
     const years = range(year);
     return withTx(pool, u.scope, async (db) => {

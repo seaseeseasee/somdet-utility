@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import ExcelJS from 'exceljs';
 import { HttpError } from '../errors.js';
+import type { FormulaSet } from '@mu/formula';
 import { canRegister } from './register.js';
 import { missingFields, scoreDataset, settingsProblems, type ScoringSettings, type UtilityInput } from './score.js';
 
@@ -250,7 +251,7 @@ const FIELD_LABEL: [keyof UtilityInput, string][] = [
 const key = (s: string) => clean(s).toLowerCase();
 
 /** ตรวจและคำนวณคะแนนสำหรับ Preview (ยังไม่เขียนฐานข้อมูล) */
-export function buildPreview(wb: ParsedWorkbook, settings: ScoringSettings, now = new Date()): PreviewSheet[] {
+export function buildPreview(wb: ParsedWorkbook, settings: FormulaSet, now = new Date()): PreviewSheet[] {
   const out = wb.sheets.map((s): PreviewSheet => {
     const usable = s.rows.filter((r) => !r.errors.length);
     const scored = new Map(scoreDataset(usable.map((r) => ({ ...r.input, ref: r })), settings, now).map((x) => [x.row.ref, x]));
@@ -261,10 +262,11 @@ export function buildPreview(wb: ParsedWorkbook, settings: ScoringSettings, now 
     for (const r of s.rows) if (r.name) dupCount.set(dupKey(r), [...(dupCount.get(dupKey(r)) ?? []), r.sourceRow]);
 
     const rows = s.rows.map((r): PreviewRow => {
-      const missing = r.errors.length ? [] : missingFields(r.input);
+      const x = scored.get(r);
+      // ช่องจำเป็นครบแต่สูตรคำนวณไม่ได้ (เช่น ราคา 0 หรือคะแนนทศนิยมเกิน 1 ตำแหน่ง) → ข้อมูลไม่ครบ พร้อมเหตุผลจากสูตร
+      const missing = r.errors.length ? [] : missingFields(r.input).length ? missingFields(r.input) : x && !x.score ? x.problems : [];
       // แถวที่ไม่ครบไม่คำนวณคะแนน จึงไม่ต้องเตือนเรื่องช่องว่างที่ใช้ค่าแทน
       const warnings = missing.length ? [] : [...r.warnings];
-      const x = scored.get(r);
       const dups = dupCount.get(dupKey(r)) ?? [];
       if (r.name && dups.length > 1) warnings.push(`ชื่อ+ปี+ราคาซ้ำกับแถว ${dups.filter((n) => n !== r.sourceRow).join(', ')} ตรวจสอบว่าเป็นคนละเครื่องหรือไม่`);
       if (x?.score && r.cachedScore !== null && Math.abs(r.cachedScore - x.score.utilityScore) > 0.01)

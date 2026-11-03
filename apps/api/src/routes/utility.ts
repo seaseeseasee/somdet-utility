@@ -1,31 +1,19 @@
-import { randomBytes } from 'node:crypto';
 import ExcelJS from 'exceljs';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { Uuid } from '../validation.js';
 import { requirePerm, type CurrentUser } from '../auth.js';
-import { writeAudit } from '../audit.js';
 import { withTx } from '../db.js';
 import { HttpError } from '../errors.js';
-import { buildPreview, checkFile, clean, LIMITS, parseWorkbook, sha256, type ParsedSettings, type PreviewSheet } from '../utility/parse.js';
-import { matchKey, registrar } from '../utility/register.js';
-import { currentYearOf, scoreDataset, type ScoringSettings } from '../utility/score.js';
+import { currentYearOf } from '@mu/formula';
+import { commitImport } from '../utility/commit.js';
+import { buildPreview, checkFile, clean, LIMITS, parseWorkbook, sha256 } from '../utility/parse.js';
+import { pendingImports, PREVIEW_TTL_MS } from '../utility/pending.js';
+import { scoreDataset, type ScoringSettings } from '../utility/score.js';
 import { activeSettings } from '../utility/settings.js';
 import type { AppDeps } from '../app.js';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const Uuid = z.string().uuid();
-
-/** Preview ที่ยังไม่ยืนยัน เก็บในหน่วยความจำ 30 นาที ผูกกับผู้ใช้ที่อัปโหลด (ไม่เก็บเนื้อหาไฟล์) */
-interface PendingImport {
-  userId: string; hospitalId: string; filename: string; sha: string; createdAt: number;
-  sheets: PreviewSheet[]; fileSettings: ParsedSettings | null; activeSettings: ScoringSettings & { id: string };
-}
-const PREVIEW_TTL_MS = 30 * 60 * 1000;
-const pending = new Map<string, PendingImport>();
-const sweep = () => {
-  for (const [k, v] of pending) if (Date.now() - v.createdAt > PREVIEW_TTL_MS) pending.delete(k);
-  while (pending.size > 200) pending.delete(pending.keys().next().value!);
-};
 
 /** โรงพยาบาลของการนำเข้า: เจ้าหน้าที่ = โรงพยาบาลของตน, ส่วนกลาง = ต้องระบุ hospitalId */
 function targetHospital(u: CurrentUser, hospitalId?: string) {
@@ -75,9 +63,7 @@ export async function utilityRoutes(app: FastifyInstance, { pool }: AppDeps) {
       if (!hospital) throw new HttpError(404, 'ไม่พบโรงพยาบาล');
 
       const sheets = buildPreview(wb, settings);
-      sweep();
-      const token = randomBytes(24).toString('base64url');
-      pending.set(token, { userId: u.id, hospitalId, filename, sha, createdAt: Date.now(), sheets, fileSettings: wb.settings, activeSettings: settings });
+      const token = pendingImports.add({ userId: u.id, hospitalId, filename, sha, sheets, fileSettings: wb.settings, activeSettings: settings });
 
       const notices: string[] = [];
       if (previous.length) notices.push(`ไฟล์นี้เคยนำเข้าแล้ว ${previous.length} ครั้ง (ล่าสุด ${new Date(previous[0].uploaded_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}) ตรวจสอบก่อนยืนยันเพื่อไม่ให้ข้อมูลซ้ำ`);
@@ -103,96 +89,18 @@ export async function utilityRoutes(app: FastifyInstance, { pool }: AppDeps) {
     const b = z
       .object({ previewToken: z.string().min(10).max(100), selectedSheets: z.array(z.string()).min(1, 'กรุณาเลือกอย่างน้อย 1 ชีต'), mode: z.enum(['append', 'replace']) })
       .parse(req.body);
-    const p = pending.get(b.previewToken);
-    if (!p || p.userId !== u.id || Date.now() - p.createdAt > PREVIEW_TTL_MS)
-      throw new HttpError(410, 'Preview หมดอายุหรือไม่พบ กรุณาอัปโหลดไฟล์ใหม่');
+    const p = pendingImports.get(b.previewToken, u.id);
+    if (!p) throw new HttpError(410, 'Preview หมดอายุหรือไม่พบ กรุณาอัปโหลดไฟล์ใหม่');
     const chosen = p.sheets.filter((s) => b.selectedSheets.includes(s.sheet));
     if (chosen.length !== new Set(b.selectedSheets).size) throw new HttpError(400, 'มีชีตที่เลือกไม่อยู่ในไฟล์');
 
-    const result = await withTx(pool, u.scope, async (db) => {
-      const settings = await activeSettings(db);
-      const rows = chosen.flatMap((s) => s.rows.filter((r) => r.status !== 'error').map((r) => ({ s, r })));
-      const batch = (
-        await db.query(
-          `INSERT INTO utility_import_batch (hospital_id, filename, file_sha256, uploaded_by, mode, sheets, settings_snapshot, row_count)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-          [p.hospitalId, p.filename, p.sha, u.id, b.mode, chosen.map((s) => s.sheet),
-           { active: settings, currentYearBe: currentYearOf(settings), fromFile: p.fileSettings, providerId: u.providerId }, rows.length],
-        )
-      ).rows[0] as { id: string };
-      // โหมดแทนที่: ใช้ครุภัณฑ์เดิมที่สร้างจากการนำเข้าครั้งก่อนต่อ เมื่อชื่อ+ปี+ราคาตรงกัน (ไม่สร้างซ้ำในทะเบียน)
-      const reuse = new Map<string, string[]>();
-      const oldEquipment = new Set<string>();
-      let replaced = 0;
-      if (b.mode === 'replace') {
-        const old = (
-          await db.query(
-            `UPDATE utility_record SET deleted_at = now() WHERE hospital_id = $1 AND dataset = ANY($2) AND deleted_at IS NULL
-             RETURNING equipment_id, name, purchase_year_be, purchase_price`,
-            [p.hospitalId, chosen.map((s) => s.sheet)],
-          )
-        ).rows;
-        replaced = old.length;
-        for (const o of old)
-          if (o.equipment_id) {
-            oldEquipment.add(o.equipment_id);
-            const k = matchKey(o.name, { purchaseYearBe: o.purchase_year_be, purchasePrice: o.purchase_price });
-            reuse.set(k, [...(reuse.get(k) ?? []), o.equipment_id]);
-          }
-      }
-
-      const reg = await registrar(db, { hospitalId: p.hospitalId, userId: u.id, batchId: batch.id });
-      let registered = 0;
-      const kept = new Set<string>();
-      for (const { s, r } of rows) {
-        const i = r.input;
-        let equipmentId: string | null = null;
-        if (r.register) {
-          equipmentId = reuse.get(matchKey(r.name, i))?.shift() ?? null;
-          if (equipmentId) kept.add(equipmentId);
-          else {
-            equipmentId = await reg.create(r.name, i);
-            registered++;
-          }
-        }
-        await db.query(
-          `INSERT INTO utility_record (hospital_id, batch_id, dataset, dataset_title, source_sheet, source_row, seq_no, name, purchase_year_be,
-             purchase_price, utilization_pct, total_cases, maintenance_cost_total, downtime_pct, revenue_total, clinical_rating,
-             satisfaction_rating, strategic_rating, data_status, equipment_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
-          [p.hospitalId, batch.id, s.sheet, s.title, s.sheet, r.sourceRow, r.seqNo, r.name, i.purchaseYearBe, i.purchasePrice, i.utilizationPct,
-           i.totalCases, i.maintenanceCostTotal, i.downtimePct, i.revenueTotal, i.clinicalRating, i.satisfactionRating, i.strategicRating,
-           r.status === 'incomplete' ? 'incomplete' : 'complete', equipmentId],
-        );
-      }
-      // ครุภัณฑ์เดิมที่ไม่มีในไฟล์ใหม่: ลบเฉพาะที่ยังเป็นค่าชั่วคราวและไม่มีข้อมูลรายปี ที่เจ้าหน้าที่แก้แล้วเก็บไว้
-      const gone = [...oldEquipment].filter((id) => !kept.has(id));
-      const removed = gone.length
-        ? (
-            await db.query(
-              `DELETE FROM equipment e WHERE e.id = ANY($1) AND e.details_pending
-                 AND NOT EXISTS (SELECT 1 FROM annual_record a WHERE a.equipment_id = e.id)
-                 AND NOT EXISTS (SELECT 1 FROM score_result s WHERE s.equipment_id = e.id)
-                 AND NOT EXISTS (SELECT 1 FROM utility_record x WHERE x.equipment_id = e.id AND x.deleted_at IS NULL)
-               RETURNING e.id, e.code, e.name`,
-              [gone],
-            )
-          ).rows
-        : [];
-      await db.query('UPDATE utility_import_batch SET registered_count = $2 WHERE id = $1', [batch.id, registered]);
-
-      const skipped = chosen.reduce((n, s) => n + s.summary.error, 0);
-      await writeAudit(db, {
-        hospitalId: p.hospitalId, actorId: u.id, action: 'import', entity: 'utility_import_batch', entityId: batch.id,
-        after: {
-          filename: p.filename, sha256: p.sha, mode: b.mode, sheets: chosen.map((s) => s.sheet), inserted: rows.length, replaced, skipped,
-          registered, reusedEquipment: kept.size, removedEquipment: removed.map((e) => e.code),
-        },
-        ip: req.ip, userAgent: req.headers['user-agent'],
-      });
-      return { batchId: batch.id, inserted: rows.length, replaced, skipped, registered, reused: kept.size, removed: removed.length };
-    });
-    pending.delete(b.previewToken);
+    const result = await withTx(pool, u.scope, async (db) =>
+      commitImport(db, {
+        pending: p, sheets: chosen, mode: b.mode, settings: await activeSettings(db),
+        actor: { id: u.id, providerId: u.providerId, ip: req.ip, userAgent: req.headers['user-agent'] },
+      }),
+    );
+    pendingImports.delete(b.previewToken);
     return result;
   });
 

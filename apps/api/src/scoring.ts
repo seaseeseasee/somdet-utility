@@ -3,6 +3,7 @@ import {
   annualMetrics,
   computeAnnualScore,
   computeScore,
+  currentYearOf,
   formulaSetFromDefinition,
   IncompleteDataError,
   rankScores,
@@ -29,8 +30,6 @@ export async function currentFormulaSet(db: Db): Promise<{ id: string; version: 
   }
 }
 
-/** ปีปัจจุบันที่ใช้คิดอายุเครื่องของข้อมูลสะสมจาก Excel */
-export const importYearOf = (fs: FormulaSet, now = new Date()) => fs.currentYearBe ?? now.getFullYear() + 543;
 
 export function toAnnualInput(row: Record<string, unknown>): AnnualInput {
   const b = rowToBody(row) as unknown as Record<string, unknown>;
@@ -123,7 +122,7 @@ async function applyImported(db: Db, rows: { equipment: EquipmentLite; outcome: 
     )
   ).rows;
   if (!imported.length) return;
-  const year = importYearOf(fs);
+  const year = currentYearOf(fs);
   for (const row of rows) {
     const x = imported.find((i) => i.equipment_id === row.equipment.id);
     if (!x) continue;

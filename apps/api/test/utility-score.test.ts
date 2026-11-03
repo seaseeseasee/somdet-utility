@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { scoreDataset, scoreUtility, settingsProblems, type ScoringSettings, type UtilityInput } from '../src/utility/score.js';
+import { FORMULA_SET_V1_1, type FormulaSet } from '@mu/formula';
+import { scoreDataset, scoreUtility, settingsProblems, type UtilityInput } from '../src/utility/score.js';
 
-/** ค่าจากชีต "สมมติฐาน" ของไฟล์ต้นแบบ (ปีปัจจุบัน 2569) */
-const S: ScoringSettings = {
-  weights: { utilization: 0.25, clinical: 0.2, financial: 0.2, reliability: 0.15, satisfaction: 0.1, strategic: 0.1 },
-  paybackPenalty: 15,
-  currentYearBe: 2569,
-};
+/** ชุดสูตรของระบบ (v1.1 = ค่าในชีต "สมมติฐาน" ของไฟล์ต้นแบบ) กับปีปัจจุบัน 2569 */
+const S: FormulaSet = { ...FORMULA_SET_V1_1, currentYearBe: 2569 };
 
 const row = (o: Partial<UtilityInput>): UtilityInput => ({
   purchaseYearBe: null, purchasePrice: null, utilizationPct: null, totalCases: null, maintenanceCostTotal: null, downtimePct: null,
@@ -84,7 +81,7 @@ describe('ตรวจชุดน้ำหนัก', () => {
   it('น้ำหนักรวมไม่เท่ากับ 1.00 → ปฏิเสธพร้อมข้อความชัดเจน', () => {
     const p = settingsProblems({ ...S, weights: { ...S.weights, utilization: 0.3 } });
     expect(p).toHaveLength(1);
-    expect(p[0]).toMatch(/ผลรวมน้ำหนัก 6 ด้านต้องเท่ากับ 1\.00 \(ในไฟล์รวมได้ 1\.05\)/);
+    expect(p[0]).toMatch(/ผลรวมน้ำหนัก 6 ด้านต้องเท่ากับ 1\.00 \(100%\) ปัจจุบันรวมได้ 1\.05/);
   });
   it('ชุดค่าเริ่มต้นผ่าน และน้ำหนักติดลบไม่ผ่าน', () => {
     expect(settingsProblems(S)).toEqual([]);

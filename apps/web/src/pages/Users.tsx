@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError, type Option } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { thDate } from '../lib/format';
+import { useOptions } from '../lib/useApi';
 
 interface UserRow { id: string; provider_id: string; name: string; hospital_id: string | null; hospital_name: string | null; status: string; roles: string[]; last_login_at: string | null }
 
@@ -19,7 +20,7 @@ export function Users() {
   const { me } = useAuth();
   const central = me?.scope === 'all';
   const [users, setUsers] = useState<UserRow[]>([]);
-  const [hospitals, setHospitals] = useState<Option[]>([]);
+  const hospitals = useOptions(central ? '/api/hospitals' : null);
   const [msg, setMsg] = useState<{ tone: string; text: string } | null>(null);
   const [form, setForm] = useState({ providerId: '', name: '', hospitalId: '', roles: [] as string[] });
   const [editing, setEditing] = useState<string | null>(null);
@@ -28,8 +29,7 @@ export function Users() {
   const load = () => api.get<UserRow[]>('/api/users').then(setUsers, (e: Error) => setMsg({ tone: 'red', text: e.message }));
   useEffect(() => {
     void load();
-    if (central) api.get<Option[]>('/api/hospitals').then(setHospitals);
-  }, [central]);
+  }, []);
 
   const roleChoices = (hospitalId: string | null) => (hospitalId ? HOSPITAL_ROLES : CENTRAL_ROLES);
   const fail = (e: unknown) => setMsg({ tone: 'red', text: e instanceof ApiError ? e.message : 'ดำเนินการไม่สำเร็จ' });

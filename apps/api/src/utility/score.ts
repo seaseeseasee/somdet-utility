@@ -1,51 +1,15 @@
-import { computeScore, FORMULA_SET_V1, IncompleteDataError, rankScores, type FormulaSet, type ScoreBreakdown } from '@mu/formula';
+import { computeScore, currentYearOf, IncompleteDataError, rankScores, validateAssumptions, type FormulaAssumptions, type FormulaSet, type ScoreBreakdown } from '@mu/formula';
 
 /**
  * คำนวณ Utility Score ของข้อมูลที่นำเข้าจากไฟล์ Excel — Pure Function
- * ใช้สูตรเดียวกับ packages/formula (คอลัมน์ E, N–X ของไฟล์ต้นแบบ) โดยน้ำหนักและค่าคงที่มาจาก scoring_settings
+ * ใช้ชุดสูตรเดียวกับทั้งระบบ (packages/formula: คอลัมน์ E, N–X ของไฟล์ต้นแบบ) อายุเครื่องคิดจากปีปัจจุบันของชุดสูตร
  */
 
-export interface ScoringSettings {
-  /** สมมติฐาน!B4:B9 ผลรวมต้อง = 1.00 */
-  weights: { utilization: number; clinical: number; financial: number; reliability: number; satisfaction: number; strategic: number };
-  /** สมมติฐาน!B10 */
-  paybackPenalty: number;
-  /** สมมติฐาน!B11 — null = ปีปัจจุบัน (พ.ศ.) */
-  currentYearBe: number | null;
-}
+/** ค่าในชีต "สมมติฐาน" ของไฟล์ (B4:B9 น้ำหนัก, B10 ตัวคูณ Payback, B11 ปีปัจจุบัน) */
+export type ScoringSettings = FormulaAssumptions;
 
-export const WEIGHT_LABEL: Record<keyof ScoringSettings['weights'], string> = {
-  utilization: 'Utilization', clinical: 'Clinical Outcome', financial: 'Financial', reliability: 'Reliability',
-  satisfaction: 'Satisfaction', strategic: 'Strategic Value',
-};
-
-const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-
-/** ตรวจชุดน้ำหนัก: แต่ละค่า ≥ 0 และผลรวม = 1.00 */
-export function settingsProblems(s: ScoringSettings): string[] {
-  const p: string[] = [];
-  for (const [k, label] of Object.entries(WEIGHT_LABEL) as [keyof ScoringSettings['weights'], string][]) {
-    const v = s.weights[k];
-    if (!finite(v)) p.push(`น้ำหนัก ${label}: ไม่มีค่าหรือไม่ใช่ตัวเลข`);
-    else if (v < 0) p.push(`น้ำหนัก ${label}: ต้องไม่ติดลบ`);
-  }
-  const sum = Object.values(s.weights).reduce((a, b) => a + (finite(b) ? b : 0), 0);
-  if (!p.length && Math.abs(sum - 1) > 1e-6) p.push(`ผลรวมน้ำหนัก 6 ด้านต้องเท่ากับ 1.00 (ในไฟล์รวมได้ ${Number(sum.toFixed(6))})`);
-  if (!finite(s.paybackPenalty) || s.paybackPenalty < 0) p.push('ตัวคูณ Payback ต้องเป็นตัวเลขที่ไม่ติดลบ');
-  if (s.currentYearBe !== null && (!Number.isInteger(s.currentYearBe) || s.currentYearBe < 2500 || s.currentYearBe > 2700))
-    p.push('ปีปัจจุบัน (พ.ศ.) ต้องเป็นจำนวนเต็มระหว่าง 2500–2700');
-  return p;
-}
-
-export const currentYearOf = (s: ScoringSettings, now = new Date()) => s.currentYearBe ?? now.getFullYear() + 543;
-
-export const formulaSetOf = (s: ScoringSettings): FormulaSet => ({
-  ...FORMULA_SET_V1,
-  version: 'นำเข้า',
-  weights: { ...s.weights },
-  paybackPenalty: s.paybackPenalty,
-  paybackDivisor: 'excel_age',
-});
+/** ตรวจค่าในชีต "สมมติฐาน" ด้วยกฎเดียวกับชุดสูตรของระบบ */
+export const settingsProblems = (s: ScoringSettings) => validateAssumptions(s);
 
 /** ช่องที่กรอกในไฟล์ (B–D, F–M) */
 export interface UtilityInput {
@@ -78,7 +42,7 @@ export const missingFields = (r: UtilityInput) => REQUIRED_FIELDS.filter(([k]) =
  * คำนวณคะแนน 1 แถว (ต้องมีช่องจำเป็นครบ)
  * เคส/ค่าบำรุงรักษาว่าง = 0, รายได้ว่างหรือ 0 = ไม่มีข้อมูลรายได้ → Financial Score = 50
  */
-export function scoreUtility(r: UtilityInput, s: ScoringSettings, now = new Date()): ScoreBreakdown {
+export function scoreUtility(r: UtilityInput, fs: FormulaSet, now = new Date()): ScoreBreakdown {
   const missing = missingFields(r);
   if (missing.length) throw new IncompleteDataError(missing.map((m) => `${m}: ไม่มีค่า`));
   const revenue = r.revenueTotal ?? 0;
@@ -86,7 +50,7 @@ export function scoreUtility(r: UtilityInput, s: ScoringSettings, now = new Date
     {
       purchaseYear: r.purchaseYearBe!,
       purchasePrice: r.purchasePrice!,
-      analysisYear: currentYearOf(s, now),
+      analysisYear: currentYearOf(fs, now),
       utilizationPct: r.utilizationPct!,
       cases: r.totalCases ?? 0,
       maintenanceCost: r.maintenanceCostTotal ?? 0,
@@ -97,7 +61,7 @@ export function scoreUtility(r: UtilityInput, s: ScoringSettings, now = new Date
       satisfactionRating: r.satisfactionRating!,
       strategicRating: r.strategicRating!,
     },
-    formulaSetOf(s),
+    fs,
   );
 }
 
@@ -111,10 +75,10 @@ export interface ScoredRow<T> {
 }
 
 /** คำนวณคะแนนทุกแถวของ dataset เดียวกันและจัดอันดับ */
-export function scoreDataset<T extends UtilityInput>(rows: T[], s: ScoringSettings, now = new Date()): ScoredRow<T>[] {
+export function scoreDataset<T extends UtilityInput>(rows: T[], fs: FormulaSet, now = new Date()): ScoredRow<T>[] {
   const out: ScoredRow<T>[] = rows.map((row) => {
     try {
-      return { row, score: scoreUtility(row, s, now), rank: null, problems: [] };
+      return { row, score: scoreUtility(row, fs, now), rank: null, problems: [] };
     } catch (e) {
       if (e instanceof IncompleteDataError) return { row, score: null, rank: null, problems: e.problems };
       throw e;

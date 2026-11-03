@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { Uuid, YearBe } from '../validation.js';
 import { AnnualBody, COLUMN, evaluate, FIELDS, fiscalRange, fiscalYearOf, rowToBody } from '../annual.js';
 import { requirePerm, type CurrentUser } from '../auth.js';
 import { writeAudit } from '../audit.js';
@@ -7,8 +8,7 @@ import { withTx, type Db } from '../db.js';
 import { HttpError } from '../errors.js';
 import type { AppDeps } from '../app.js';
 
-const Uuid = z.string().uuid();
-const Params = z.object({ id: Uuid, year: z.coerce.number().int().min(2500).max(2700) });
+const Params = z.object({ id: Uuid, year: YearBe });
 
 export const STATUS_LABEL: Record<string, string> = { draft: 'ร่าง', submitted: 'รอตรวจสอบ', approved: 'ยืนยันแล้ว', locked: 'ล็อกแล้ว' };
 

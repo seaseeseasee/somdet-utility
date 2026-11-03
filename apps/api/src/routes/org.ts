@@ -1,12 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { Uuid } from '../validation.js';
 import { ASSIGNABLE_CENTRAL_ROLES, ASSIGNABLE_HOSPITAL_ROLES, CENTRAL_ROLES, HOSPITAL_ROLES, requirePerm, requireUser, ROLES, type Role } from '../auth.js';
 import { writeAudit } from '../audit.js';
 import { withTx, type Db } from '../db.js';
 import { HttpError } from '../errors.js';
 import type { AppDeps } from '../app.js';
 
-const Uuid = z.string().uuid();
 
 export async function orgRoutes(app: FastifyInstance, { pool }: AppDeps) {
   // ---------------------------------------------------------------- hospitals

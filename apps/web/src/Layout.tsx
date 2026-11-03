@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { api } from './lib/api';
+import { useFormulaVersion } from './lib/useApi';
 import { useAuth } from './lib/auth';
 
 type Item = { to: string; label: string; perm?: string; soon?: string; central?: boolean; end?: boolean };
@@ -25,10 +24,9 @@ const TITLES: Record<string, string> = { equipment: 'ทะเบียนคร
 
 export function Layout() {
   const { me, logout, can } = useAuth();
-  const [formula, setFormula] = useState<string | null>(null);
   const loc = useLocation();
   // เวอร์ชันชุดสูตรที่ใช้อยู่ (อัปเดตเมื่อเปลี่ยนหน้า เช่น หลังผู้ดูแลปรับน้ำหนัก)
-  useEffect(() => { if (me) api.get<{ version: string }>('/api/formula-sets/current').then((r) => setFormula(r.version), () => undefined); }, [me, loc.pathname]);
+  const formula = useFormulaVersion(loc.pathname, Boolean(me));
   if (!me) return null;
   const isCentral = me.scope === 'all';
   const section = loc.pathname.split('/')[1] ?? '';

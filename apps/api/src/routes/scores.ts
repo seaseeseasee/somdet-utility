@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { ADVICE_DISCLAIMER, assessValue, RECOMMENDATION_TEXT, UTILIZATION_LEVELS, type UtilizationAdvice, type ValueAssessment } from '@mu/formula';
 import { z } from 'zod';
+import { YearBe } from '../validation.js';
 import { fiscalYearOf } from '../annual.js';
 import { requirePerm } from '../auth.js';
 import { withTx } from '../db.js';
@@ -8,7 +9,6 @@ import { HttpError } from '../errors.js';
 import { annualSeries, currentFormulaSet, EQ_SELECT, scoreAll, scoreFromRecords, utilizationFor, WINDOW_YEARS, type EquipmentLite, type ScoreOutcome } from '../scoring.js';
 import type { AppDeps } from '../app.js';
 
-const Year = z.coerce.number().int().min(2500).max(2700);
 const defaultYear = () => fiscalYearOf(new Date()) - 1;
 
 interface ScoreRow {
@@ -23,7 +23,7 @@ export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
   app.get('/api/scores', async (req) => {
     const u = requirePerm(req, 'dashboard.view');
     const q = z
-      .object({ year: Year.optional(), hospitalId: z.string().uuid().optional(), departmentId: z.string().uuid().optional() })
+      .object({ year: YearBe.optional(), hospitalId: z.string().uuid().optional(), departmentId: z.string().uuid().optional() })
       .parse(req.query);
     const year = q.year ?? defaultYear();
     return withTx(pool, u.scope, async (db) => {
@@ -50,6 +50,7 @@ export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
         year,
         window: { from: year - WINDOW_YEARS + 1, to: year },
         formula: { version: f.version },
+        weights: f.fs.weights,
         summary: {
           total: out.length, scored: scored.length, notScored: out.length - scored.length,
           average: scored.length ? scored.reduce((s, r) => s + (r.utilityScore ?? 0), 0) / scored.length : null,
@@ -68,7 +69,7 @@ export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
   app.get('/api/equipment/:id/score', async (req) => {
     const u = requirePerm(req, 'equipment.read');
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
-    const q = z.object({ year: Year.optional() }).parse(req.query);
+    const q = z.object({ year: YearBe.optional() }).parse(req.query);
     const year = q.year ?? defaultYear();
     return withTx(pool, u.scope, async (db) => {
       const e = (await db.query(`${EQ_SELECT} WHERE e.id = $1`, [id])).rows[0] as EquipmentLite | undefined;
@@ -93,6 +94,7 @@ export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
         year,
         window: { from: year - WINDOW_YEARS + 1, to: year },
         formula: { version: f.version },
+        weights: f.fs.weights,
         outcome,
         utilization: outcome.status === 'scored' ? utilizationFor(e, outcome.inputs.utilizationPct) : null,
         assessment: outcome.status === 'scored' ? assessValue(outcome.breakdown, { usefulLifeYears: e.useful_life_years }) : null,
