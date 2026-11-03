@@ -122,18 +122,6 @@ export async function dashboardRoutes(app: FastifyInstance, { pool }: AppDeps) {
       const recs = (
         eq.length ? (await db.query('SELECT * FROM annual_record WHERE equipment_id = ANY($1) AND fiscal_year_be BETWEEN $2 AND $3', [eq.map((e) => e.id), years[0], year])).rows : []
       ) as Rec[];
-      const cycles = (await db.query('SELECT id, hospital_id, status, closes_at FROM assessment_cycle WHERE fiscal_year_be = $1', [year])).rows;
-      const tasks = cycles.length
-        ? (
-            await db.query(
-              `SELECT t.hospital_id, a.status, (SELECT action FROM review_action r WHERE r.annual_record_id = a.id ORDER BY at DESC, id DESC LIMIT 1) AS last_action
-                 FROM assessment_task t JOIN assessment_cycle c ON c.id = t.cycle_id
-                 LEFT JOIN annual_record a ON a.equipment_id = t.equipment_id AND a.fiscal_year_be = c.fiscal_year_be
-                WHERE c.fiscal_year_be = $1`,
-              [year],
-            )
-          ).rows
-        : [];
       const scores = await scoreAll(db, year, f.fs);
       const eqIds = new Set(eq.map((e) => e.id));
 
@@ -155,14 +143,14 @@ export async function dashboardRoutes(app: FastifyInstance, { pool }: AppDeps) {
         const scored = hScores.filter((s) => s.outcome.status === 'scored').map((s) => (s.outcome as { breakdown: { utilityScore: number } }).breakdown.utilityScore);
         const dist = { high: 0, good: 0, medium: 0, low: 0 };
         for (const v of scored) dist[recommendationOf(v, f.fs)]++;
-        const hTasks = tasks.filter((t) => t.hospital_id === h.id);
-        const cyc = cycles.find((c) => c.hospital_id === h.id);
+        // ความคืบหน้าปีนี้: ครุภัณฑ์ที่ต้องมีข้อมูลปีนี้ เทียบกับสถานะข้อมูลรายปี (ไม่มีรอบประเมิน กรอกได้ตลอดปี)
+        const statusOf = new Map(hRecs.filter((r) => r.fiscal_year_be === year).map((r) => [r.equipment_id, r.status]));
+        const due = eligible(year).filter((e) => ['ready', 'in_use', 'repair'].includes(e.status)).map((e) => statusOf.get(e.id));
         const progress = {
-          approved: hTasks.filter((t) => CONFIRMED.includes(t.status)).length,
-          submitted: hTasks.filter((t) => t.status === 'submitted').length,
-          inProgress: hTasks.filter((t) => t.status === 'draft').length,
-          notStarted: hTasks.filter((t) => !t.status).length,
-          total: hTasks.length,
+          approved: due.filter((s) => s && CONFIRMED.includes(s)).length,
+          inProgress: due.filter((s) => s === 'draft').length,
+          notStarted: due.filter((s) => !s).length,
+          total: due.length,
         };
         const yearRecs = hRecs.filter((r) => r.fiscal_year_be === year).map(rowToBody);
         const denom = eligible(year).length;
@@ -175,8 +163,7 @@ export async function dashboardRoutes(app: FastifyInstance, { pool }: AppDeps) {
         const confirmedThisYear = new Set(hRecs.filter((r) => r.fiscal_year_be === year && CONFIRMED.includes(r.status)).map((r) => r.equipment_id)).size;
 
         const followUps: { level: 'red' | 'warn'; text: string }[] = [];
-        if (!cyc) followUps.push({ level: 'red', text: `ยังไม่เปิดรอบประเมินปีงบ ${year}` });
-        else if (progress.total && progress.approved < progress.total)
+        if (progress.total && progress.approved < progress.total)
           followUps.push({ level: progress.approved / progress.total < 0.5 ? 'red' : 'warn', text: `ข้อมูลปี ${year} ยืนยันแล้ว ${progress.approved} จาก ${progress.total} รายการ` });
         if (denom && !yearRecs.length) followUps.push({ level: 'red', text: `ยังไม่มีการบันทึกข้อมูลปีงบ ${year} เลย (${denom} รายการที่ต้องบันทึก)` });
         else for (const [g, v] of Object.entries(completeness))
@@ -189,7 +176,6 @@ export async function dashboardRoutes(app: FastifyInstance, { pool }: AppDeps) {
           equipment: hEq.length,
           totalValue: hEq.reduce((s, e) => s + e.purchase_price, 0),
           confirmedThisYear,
-          cycle: cyc ? { status: cyc.status, closesAt: cyc.closes_at } : null,
           progress,
           averageScore: scored.length ? scored.reduce((a, b) => a + b, 0) / scored.length : null,
           scoredCount: scored.length,

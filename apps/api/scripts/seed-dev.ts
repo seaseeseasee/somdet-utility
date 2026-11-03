@@ -13,13 +13,8 @@ export const DEMO = {
   ],
   users: [
     { pid: 'PID-DEMO-CA', name: 'ผู้ดูแลส่วนกลางตัวอย่าง', h: null, roles: ['central_admin'] },
-    { pid: 'PID-DEMO-CE', name: 'ผู้บริหารส่วนกลางตัวอย่าง', h: null, roles: ['central_executive'] },
-    { pid: 'PID-DEMO-A-ADMIN', name: 'ผู้ดูแลตัวอย่าง A', h: 'DEMOA', roles: ['hospital_admin'] },
+    // แต่ละโรงพยาบาลมีเจ้าหน้าที่ 1 คน
     { pid: 'PID-DEMO-A-ENTRY', name: 'เจ้าหน้าที่ตัวอย่าง A', h: 'DEMOA', roles: ['data_entry'] },
-    { pid: 'PID-DEMO-A-REVIEW', name: 'ผู้ตรวจตัวอย่าง A', h: 'DEMOA', roles: ['reviewer'] },
-    { pid: 'PID-DEMO-A-EXEC', name: 'ผู้บริหารตัวอย่าง A', h: 'DEMOA', roles: ['executive'] },
-    { pid: 'PID-DEMO-A-PENDING', name: 'ผู้ใช้ใหม่ตัวอย่าง A', h: 'DEMOA', roles: [] },
-    { pid: 'PID-DEMO-B-ADMIN', name: 'ผู้ดูแลตัวอย่าง B', h: 'DEMOB', roles: ['hospital_admin'] },
     { pid: 'PID-DEMO-B-ENTRY', name: 'เจ้าหน้าที่ตัวอย่าง B', h: 'DEMOB', roles: ['data_entry'] },
   ],
   departments: {
@@ -102,8 +97,7 @@ export async function seedDemo(adminUrl: string, log = console.log, opts: { annu
     }
     let annual = 0;
     if (opts.annual) {
-      // ข้อมูลรายปีตัวอย่าง (DEMO) ที่ยืนยันแล้ว ปีงบ 2565–2568 เพื่อให้หน้าผลวิเคราะห์มีข้อมูล (ปี 2569 เว้นไว้ทดลองรอบประเมิน)
-      const reviewer = uid['PID-DEMO-A-REVIEW'];
+      // ข้อมูลรายปีตัวอย่าง (DEMO) ที่เจ้าหน้าที่ยืนยันแล้ว ปีงบ 2565–2568 เพื่อให้หน้าผลวิเคราะห์มีข้อมูล (ปี 2569 เว้นไว้ทดลองกรอก)
       for (const [code, util, casesPerYear, maintPerYear, down, revenuePerYear, k, l, m] of DEMO.annual) {
         const e = (await c.query('SELECT id, hospital_id, purchase_year_be, created_by FROM equipment WHERE code = $1 AND hospital_id = $2', [code, hid.DEMOA])).rows[0];
         for (let fy = Math.max(2565, e.purchase_year_be); fy <= 2568; fy++) {
@@ -116,12 +110,12 @@ export async function seedDemo(adminUrl: string, log = console.log, opts: { annu
                clinical_necessity, condition, inspected_at, safety_event, recall_status, unit_recommendation, rationale,
                status, created_by, updated_by, approved_by, approved_at, submitted_at)
              VALUES ($1,$2,$3,250,$4,$5,$6,$7,$7,$8,$9,$10,$11,0,$12,$13,$14,$15,$16,$17,$18,$19,'ข้อมูลตัวอย่าง (DEMO)',
-               'high','good',$20,false,'none','continue','ข้อมูลตัวอย่าง (DEMO)','approved',$21,$21,$22,now(),now())
+               'high','good',$20,false,'none','continue','ข้อมูลตัวอย่าง (DEMO)','approved',$21,$21,$21,now(),now())
              ON CONFLICT (equipment_id, fiscal_year_be) DO NOTHING`,
             [e.hospital_id, e.id, fy, Math.round(250 * Math.min(1, (util / 100) * 1.1)), hours, Math.round(hours * Math.min(0.98, (util / 100) * drift)),
              Math.round(casesPerYear * drift), Math.round(maintPerYear * 0.5), Math.round(maintPerYear * 0.2), Math.round(maintPerYear * 0.2), Math.round(maintPerYear * 0.1),
              revenuePerYear, revenuePerYear === 0, Math.round(down * 2.5), Math.max(1, Math.round(down / 3)), Math.round(hours * down / 100), k, l, m,
-             `${fy - 543}-10-05`, e.created_by, reviewer],
+             `${fy - 543}-10-05`, e.created_by],
           );
           annual++;
         }

@@ -10,6 +10,7 @@ import {
   SESSION_COOKIE,
 } from '../auth.js';
 import { writeAudit } from '../audit.js';
+import { ProviderClaims, provisionStaff } from '../provision.js';
 import { withTx } from '../db.js';
 import { HttpError } from '../errors.js';
 import type { AppDeps } from '../app.js';
@@ -41,15 +42,25 @@ export async function authRoutes(app: FastifyInstance, { pool, config }: AppDeps
     });
   });
 
-  /** เข้าสู่ระบบจำลองสำหรับนักพัฒนาเท่านั้น — ปิดอัตโนมัติเมื่อ NODE_ENV=production */
+  /**
+   * เข้าสู่ระบบจำลองสำหรับนักพัฒนาเท่านั้น — ปิดอัตโนมัติเมื่อ NODE_ENV=production
+   * ผู้ใช้ใหม่ส่งข้อมูลจำลองของ Provider ID (ชื่อ รหัสและชื่อโรงพยาบาล) มาด้วย เพื่อสร้างบัญชีเจ้าหน้าที่อัตโนมัติ
+   */
   app.post(
     '/api/auth/dev-login',
     { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
     async (req, reply) => {
       if (!config.devLoginEnabled) throw new HttpError(404, 'ไม่พบหน้านี้');
-      const { providerId } = z.object({ providerId: z.string().trim().min(3).max(100) }).parse(req.body);
-      const u = await withTx(pool, { scope: 'auth' }, (db) => findUserByProviderId(db, providerId));
-      if (!u) throw new HttpError(404, 'ไม่พบผู้ใช้นี้ในระบบ ติดต่อผู้ดูแลระบบเพื่อลงทะเบียน');
+      const b = z
+        .object({ providerId: z.string().trim().min(3).max(100), name: z.string().optional(), hcode: z.string().optional(), hospitalName: z.string().optional() })
+        .parse(req.body);
+      let u = await withTx(pool, { scope: 'auth' }, (db) => findUserByProviderId(db, b.providerId));
+      if (!u && b.hcode) {
+        const claims = ProviderClaims.parse(b);
+        await withTx(pool, { scope: 'all' }, (db) => provisionStaff(db, claims, { ip: req.ip, userAgent: req.headers['user-agent'] }));
+        u = await withTx(pool, { scope: 'auth' }, (db) => findUserByProviderId(db, b.providerId));
+      }
+      if (!u) throw new HttpError(404, 'ไม่พบผู้ใช้นี้ในระบบ และไม่มีข้อมูลโรงพยาบาลจาก Provider ID');
       if (u.status === 'pending') throw new HttpError(403, 'บัญชีรอผู้ดูแลระบบอนุมัติและกำหนดบทบาท');
       if (u.status !== 'active') throw new HttpError(403, 'บัญชีถูกระงับการใช้งาน');
       const token = await createSession(pool, u.id, config.SESSION_HOURS, req.ip, req.headers['user-agent']);

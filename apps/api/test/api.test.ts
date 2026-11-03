@@ -9,8 +9,7 @@ const S: Record<string, ReturnType<typeof env.as>> = {};
 beforeAll(async () => {
   env = await setupTestEnv();
   for (const [k, pid] of Object.entries({
-    ca: 'PID-DEMO-CA', ce: 'PID-DEMO-CE', aAdmin: 'PID-DEMO-A-ADMIN', aEntry: 'PID-DEMO-A-ENTRY',
-    aReview: 'PID-DEMO-A-REVIEW', aExec: 'PID-DEMO-A-EXEC', bAdmin: 'PID-DEMO-B-ADMIN', bEntry: 'PID-DEMO-B-ENTRY',
+    ca: 'PID-DEMO-CA', aEntry: 'PID-DEMO-A-ENTRY', bEntry: 'PID-DEMO-B-ENTRY',
   }))
     S[k] = env.as((await env.login(pid)).cookie);
 });
@@ -23,12 +22,9 @@ const newEquipment = (o: Record<string, unknown> = {}) => ({
 });
 
 describe('การเข้าสู่ระบบ', () => {
-  it('ไม่พบผู้ใช้ → 404, รออนุมัติ → 403', async () => {
+  it('ไม่พบผู้ใช้ → 404', async () => {
     const h = { 'x-mu-csrf': '1' };
     expect((await env.app.inject({ method: 'POST', url: '/api/auth/dev-login', headers: h, payload: { providerId: 'PID-NOPE' } })).statusCode).toBe(404);
-    const p = await env.app.inject({ method: 'POST', url: '/api/auth/dev-login', headers: h, payload: { providerId: 'PID-DEMO-A-PENDING' } });
-    expect(p.statusCode).toBe(403);
-    expect(p.json().error).toMatch(/รอผู้ดูแล/);
   });
   it('cookie เป็น HttpOnly + SameSite=Strict และ /me คืนบทบาทกับสิทธิ์', async () => {
     const { raw, cookie } = await env.login('PID-DEMO-A-ENTRY');
@@ -37,8 +33,8 @@ describe('การเข้าสู่ระบบ', () => {
     const me = (await env.as(cookie).get('/api/auth/me')).json();
     expect(me.hospital.hcode).toBe('DEMOA');
     expect(me.roles[0].role).toBe('data_entry');
-    expect(me.permissions).toContain('equipment.write');
-    expect(me.permissions).not.toContain('annual.review');
+    expect(me.permissions).toEqual(expect.arrayContaining(['equipment.write', 'equipment.code.change', 'annual.write', 'annual.unlock']));
+    expect(me.permissions).not.toContain('users.manage');
   });
   it('ไม่ได้เข้าสู่ระบบ → 401', async () => {
     expect((await env.app.inject({ method: 'GET', url: '/api/equipment' })).statusCode).toBe(401);
@@ -57,7 +53,7 @@ describe('การเข้าสู่ระบบ', () => {
     expect(r.json().required).toContain('OIDC_CLIENT_ID');
   });
   it('logout แล้ว session ใช้ไม่ได้', async () => {
-    const { cookie } = await env.login('PID-DEMO-A-EXEC');
+    const { cookie } = await env.login('PID-DEMO-A-ENTRY');
     await env.app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie, 'x-mu-csrf': '1' } });
     expect((await env.as(cookie).get('/api/auth/me')).statusCode).toBe(401);
   });
@@ -67,7 +63,7 @@ describe('การแยกข้อมูลตามโรงพยาบา�
   it('ผู้ใช้ รพ. เห็นเฉพาะครุภัณฑ์ของตน ส่วนกลางเห็นทั้งหมด', async () => {
     expect((await S.aEntry!.get('/api/equipment')).json().total).toBe(8);
     expect((await S.bEntry!.get('/api/equipment')).json().total).toBe(2);
-    expect((await S.ce!.get('/api/equipment')).json().total).toBe(10);
+    expect((await S.ca!.get('/api/equipment')).json().total).toBe(10);
   });
   it('รพ. B เปิดครุภัณฑ์ของ รพ. A ไม่ได้ (404) และกรอง hospitalId ของคนอื่นไม่ได้', async () => {
     const aRow = (await S.aEntry!.get('/api/equipment?q=DEMO-001')).json().rows[0];
@@ -125,8 +121,8 @@ describe('ทะเบียนครุภัณฑ์', () => {
     const r = await S.bEntry!.post('/api/equipment', newEquipment({ departmentId: env.seed.dep['DEMOB/กลุ่มงานรังสีวิทยา'] }));
     expect(r.statusCode).toBe(201);
   });
-  it('ผู้ตรวจสอบ ผู้บริหาร และส่วนกลาง เพิ่มครุภัณฑ์ไม่ได้', async () => {
-    for (const s of [S.aReview!, S.aExec!, S.ce!]) expect((await s.post('/api/equipment', newEquipment({ code: 'Z' }))).statusCode).toBe(403);
+  it('ส่วนกลางเพิ่มครุภัณฑ์ไม่ได้', async () => {
+    for (const s of [S.ca!]) expect((await s.post('/api/equipment', newEquipment({ code: 'Z' }))).statusCode).toBe(403);
   });
   it('แก้ไขพร้อมกัน: version เก่า → 409', async () => {
     const id = created.id as string;
@@ -136,17 +132,16 @@ describe('ทะเบียนครุภัณฑ์', () => {
     const stale = await S.aEntry!.put(`/api/equipment/${id}`, { ...newEquipment({ name: 'ชนกัน' }), version: 1 });
     expect(stale.statusCode).toBe(409);
   });
-  it('เปลี่ยนรหัสได้เฉพาะผู้ดูแล รพ.', async () => {
+  it('เจ้าหน้าที่เปลี่ยนรหัสครุภัณฑ์ได้ (ไม่มีผู้ดูแล รพ.)', async () => {
     const id = created.id as string;
-    expect((await S.aEntry!.put(`/api/equipment/${id}`, { ...newEquipment({ code: 'DEMO-T02' }), version: 2 })).statusCode).toBe(403);
-    expect((await S.aAdmin!.put(`/api/equipment/${id}`, { ...newEquipment({ code: 'DEMO-T02' }), version: 2 })).statusCode).toBe(200);
+    expect((await S.aEntry!.put(`/api/equipment/${id}`, { ...newEquipment({ code: 'DEMO-T02' }), version: 2 })).statusCode).toBe(200);
   });
   it('ประวัติการแก้ไขแสดงผู้แก้และค่าก่อน/หลัง', async () => {
-    const h = (await S.aExec!.get(`/api/equipment/${created.id}/history`)).json();
+    const h = (await S.aEntry!.get(`/api/equipment/${created.id}/history`)).json();
     expect(h.map((x: { action: string }) => x.action)).toEqual(['update', 'update', 'create']);
     expect(h[1].before.name).toBe('เครื่องทดสอบ (DEMO)');
     expect(h[1].after.name).toBe('แก้ชื่อ (DEMO)');
-    expect(h[0].actor_name).toBe('ผู้ดูแลตัวอย่าง A');
+    expect(h[0].actor_name).toBe('เจ้าหน้าที่ตัวอย่าง A');
   });
   it('ค้นหาและกรอง', async () => {
     expect((await S.aEntry!.get('/api/equipment?q=ultra')).json().rows.map((r: { code: string }) => r.code)).toEqual(['DEMO-002']);
@@ -157,7 +152,7 @@ describe('ทะเบียนครุภัณฑ์', () => {
 
 describe('Audit Log', () => {
   it('hash chain ถูกต้อง และแอปแก้/ลบ audit ไม่ได้', async () => {
-    const v = (await S.aAdmin!.get('/api/audit/verify')).json();
+    const v = (await S.aEntry!.get('/api/audit/verify')).json();
     expect(v.checked).toBeGreaterThan(3);
     expect(v.broken).toEqual([]);
     await expect(
@@ -172,45 +167,87 @@ describe('Audit Log', () => {
     await c.query(`UPDATE audit_log SET after = '{"tampered":true}' WHERE id = (SELECT min(id) FROM audit_log WHERE hospital_id = $1)`, [env.seed.hid.DEMOA]);
     await c.query('ALTER TABLE audit_log ENABLE TRIGGER audit_log_no_update');
     await c.end();
-    expect((await S.aAdmin!.get('/api/audit/verify')).json().broken.length).toBeGreaterThan(0);
+    expect((await S.aEntry!.get('/api/audit/verify')).json().broken.length).toBeGreaterThan(0);
   });
 });
 
 describe('ผู้ใช้และสิทธิ์', () => {
-  it('ผู้ดูแล รพ. เห็นเฉพาะผู้ใช้ รพ. ตน', async () => {
-    const users = (await S.aAdmin!.get('/api/users')).json();
-    expect(users.every((u: { hospital_id: string }) => u.hospital_id === env.seed.hid.DEMOA)).toBe(true);
-    expect((await S.ca!.get('/api/users')).json().length).toBe(9);
+  const users = async () => (await S.ca!.get('/api/users')).json() as { id: string; provider_id: string; status: string; hospital_id: string | null }[];
+  it('เฉพาะผู้ดูแลระบบส่วนกลางจัดการผู้ใช้ได้', async () => {
+    expect((await users()).length).toBe(3);
     expect((await S.aEntry!.get('/api/users')).statusCode).toBe(403);
+    expect((await S.aEntry!.post('/api/users', { providerId: 'PID-DEMO-NEW1', name: 'x', roles: ['data_entry'] })).statusCode).toBe(403);
   });
-  it('ผู้ดูแล รพ. กำหนดบทบาทส่วนกลางไม่ได้ แต่เพิ่มเจ้าหน้าที่ได้', async () => {
-    expect((await S.aAdmin!.post('/api/users', { providerId: 'PID-DEMO-NEW1', name: 'x', roles: ['central_admin'] })).statusCode).toBe(403);
-    const r = await S.aAdmin!.post('/api/users', { providerId: 'PID-DEMO-NEW2', name: 'เจ้าหน้าที่ใหม่ (DEMO)', roles: ['data_entry'], hospitalId: env.seed.hid.DEMOB });
-    expect(r.statusCode).toBe(201);
-    expect(r.json().hospital_id).toBe(env.seed.hid.DEMOA); // ถูกบังคับเป็น รพ. ของผู้ดูแล
-    expect(r.json().status).toBe('active');
+  it('ผู้ใช้ของโรงพยาบาลมีได้เฉพาะบทบาทเจ้าหน้าที่ และบทบาทส่วนกลางต้องไม่ผูกโรงพยาบาล', async () => {
+    for (const role of ['hospital_admin', 'reviewer', 'executive'])
+      expect((await S.ca!.post('/api/users', { providerId: `PID-DEMO-R-${role}`, name: 'x', hospitalId: env.seed.hid.DEMOA, roles: [role] })).statusCode).toBe(400);
+    expect((await S.ca!.post('/api/users', { providerId: 'PID-DEMO-R-CA', name: 'x', hospitalId: env.seed.hid.DEMOA, roles: ['central_admin'] })).statusCode).toBe(400);
+    expect((await S.ca!.post('/api/users', { providerId: 'PID-DEMO-R-DE', name: 'x', roles: ['data_entry'] })).statusCode).toBe(400);
   });
-  it('ผู้ดูแล รพ. แก้ผู้ใช้ รพ. อื่นไม่ได้ และระงับตนเองไม่ได้', async () => {
-    const bUser = (await S.bAdmin!.get('/api/users')).json().find((u: { provider_id: string }) => u.provider_id === 'PID-DEMO-B-ENTRY');
-    expect((await S.aAdmin!.put(`/api/users/${bUser.id}`, { status: 'suspended' })).statusCode).toBe(404);
-    const me = (await S.aAdmin!.get('/api/auth/me')).json();
-    expect((await S.aAdmin!.put(`/api/users/${me.id}`, { status: 'suspended' })).statusCode).toBe(400);
+  it('ส่วนกลางมีบทบาทเดียว: ผู้ดูแลระบบส่วนกลางมีสิทธิ์ของผู้บริหารส่วนกลางเดิมครบ', async () => {
+    expect((await S.ca!.post('/api/users', { providerId: 'PID-DEMO-R-CE', name: 'x', roles: ['central_executive'] })).statusCode).toBe(400);
+    const me = (await S.ca!.get('/api/auth/me')).json();
+    expect(me.permissions).toEqual(expect.arrayContaining(['dashboard.view', 'report.export', 'equipment.read', 'audit.view', 'users.manage', 'hospital.manage']));
+    expect((await S.ca!.get('/api/dashboard/network?year=2568')).statusCode).toBe(200);
   });
-  it('ระงับผู้ใช้แล้ว session เดิมใช้ไม่ได้ทันที', async () => {
-    const { cookie } = await env.login('PID-DEMO-A-REVIEW');
-    const target = (await S.aAdmin!.get('/api/users')).json().find((u: { provider_id: string }) => u.provider_id === 'PID-DEMO-A-REVIEW');
-    expect((await S.aAdmin!.put(`/api/users/${target.id}`, { status: 'suspended' })).statusCode).toBe(200);
+  it('แต่ละโรงพยาบาลมีเจ้าหน้าที่ได้ 1 คน', async () => {
+    const r = await S.ca!.post('/api/users', { providerId: 'PID-DEMO-A-2', name: 'เจ้าหน้าที่คนที่สอง (DEMO)', hospitalId: env.seed.hid.DEMOA, roles: ['data_entry'] });
+    expect(r.statusCode).toBe(409);
+    expect(r.json().error).toMatch(/มีเจ้าหน้าที่แล้ว/);
+  });
+  it('เปลี่ยนเจ้าหน้าที่: ระงับคนเดิมแล้ว session ใช้ไม่ได้ทันที เพิ่มคนใหม่ได้ เปิดคนเดิมซ้อนไม่ได้', async () => {
+    const { cookie } = await env.login('PID-DEMO-B-ENTRY');
+    const old = (await users()).find((u) => u.provider_id === 'PID-DEMO-B-ENTRY')!;
+    expect((await S.ca!.put(`/api/users/${old.id}`, { status: 'suspended' })).statusCode).toBe(200);
     expect((await env.as(cookie).get('/api/auth/me')).statusCode).toBe(401);
-    await S.aAdmin!.put(`/api/users/${target.id}`, { status: 'active' });
+    const n = await S.ca!.post('/api/users', { providerId: 'PID-DEMO-B-NEW', name: 'เจ้าหน้าที่ใหม่ B (DEMO)', hospitalId: env.seed.hid.DEMOB, roles: ['data_entry'] });
+    expect(n.statusCode).toBe(201);
+    expect(n.json().status).toBe('active');
+    expect((await S.ca!.put(`/api/users/${old.id}`, { status: 'active' })).statusCode).toBe(409);
+    expect((await S.ca!.put(`/api/users/${n.json().id}`, { status: 'suspended' })).statusCode).toBe(200);
+    expect((await S.ca!.put(`/api/users/${old.id}`, { status: 'active' })).statusCode).toBe(200);
   });
-  it('อนุมัติผู้ใช้รออนุมัติแล้วเข้าสู่ระบบได้', async () => {
-    const p = (await S.aAdmin!.get('/api/users')).json().find((u: { provider_id: string }) => u.provider_id === 'PID-DEMO-A-PENDING');
-    expect((await S.aAdmin!.put(`/api/users/${p.id}`, { status: 'active', roles: ['executive'] })).statusCode).toBe(200);
-    await expect(env.login('PID-DEMO-A-PENDING')).resolves.toBeTruthy();
+  it('เข้าสู่ระบบครั้งแรกด้วย Provider ID: สร้างบัญชีเจ้าหน้าที่อัตโนมัติ และคนใหม่แทนคนเดิม', async () => {
+    const h = { 'x-mu-csrf': '1' };
+    const devLogin = (payload: object) => env.app.inject({ method: 'POST', url: '/api/auth/dev-login', headers: h, payload });
+    // ข้อมูลจาก Provider ID ไม่ครบ → ไม่สร้างบัญชี
+    expect((await devLogin({ providerId: 'PID-DEMO-B-NEW2', name: 'x', hcode: 'DEMOB' })).statusCode).toBe(400);
+    const { cookie: oldCookie } = await env.login('PID-DEMO-B-ENTRY');
+    const r = await devLogin({ providerId: 'PID-DEMO-B-NEW2', name: 'เจ้าหน้าที่ใหม่ B2 (DEMO)', hcode: 'DEMOB', hospitalName: 'ชื่ออื่น' });
+    expect(r.statusCode).toBe(200);
+    const all = await users();
+    const fresh = all.find((u) => u.provider_id === 'PID-DEMO-B-NEW2')!;
+    expect(fresh.status).toBe('active');
+    expect(fresh.hospital_id).toBe(env.seed.hid.DEMOB);
+    expect(all.find((u) => u.provider_id === 'PID-DEMO-B-ENTRY')!.status).toBe('suspended');
+    expect((await env.as(oldCookie).get('/api/auth/me')).statusCode).toBe(401);
+    const me = (await env.as(`mu_session=${r.cookies.find((c) => c.name === 'mu_session')!.value}`).get('/api/auth/me')).json();
+    expect(me.roles.map((x: { role: string }) => x.role)).toEqual(['data_entry']);
+    // เข้าซ้ำใช้บัญชีเดิม ไม่สร้างใหม่
+    expect((await devLogin({ providerId: 'PID-DEMO-B-NEW2', name: 'x', hcode: 'DEMOA', hospitalName: 'x' })).statusCode).toBe(200);
+    expect((await users()).length).toBe(all.length);
+    // ผู้ใช้ที่ถูกระงับยังเข้าไม่ได้
+    expect((await devLogin({ providerId: 'PID-DEMO-B-ENTRY' })).statusCode).toBe(403);
+  });
+  it('โรงพยาบาลที่ยังไม่มีในระบบ สร้างจากข้อมูลของ Provider ID', async () => {
+    const r = await env.app.inject({ method: 'POST', url: '/api/auth/dev-login', headers: { 'x-mu-csrf': '1' },
+      payload: { providerId: 'PID-DEMO-Z-1', name: 'เจ้าหน้าที่ Z (DEMO)', hcode: 'DEMOZ', hospitalName: 'โรงพยาบาลตัวอย่าง Z (DEMO)' } });
+    expect(r.statusCode).toBe(200);
+    const hz = (await S.ca!.get('/api/hospitals')).json().find((x: { hcode: string }) => x.hcode === 'DEMOZ');
+    expect(hz.name).toBe('โรงพยาบาลตัวอย่าง Z (DEMO)');
+  });
+  it('ผู้ใช้ที่ยังไม่มีบทบาทรออนุมัติ เข้าสู่ระบบไม่ได้จนกว่าจะกำหนดบทบาท', async () => {
+    expect((await S.ca!.post('/api/hospitals', { hcode: 'DEMOC', name: 'รพ.ตัวอย่าง C (DEMO)' })).statusCode).toBe(201);
+    const hc = (await S.ca!.get('/api/hospitals')).json().find((h: { hcode: string }) => h.hcode === 'DEMOC');
+    const p = await S.ca!.post('/api/users', { providerId: 'PID-DEMO-C-ENTRY', name: 'เจ้าหน้าที่ C (DEMO)', hospitalId: hc.id, roles: [] });
+    expect(p.json().status).toBe('pending');
+    const r = await env.app.inject({ method: 'POST', url: '/api/auth/dev-login', headers: { 'x-mu-csrf': '1' }, payload: { providerId: 'PID-DEMO-C-ENTRY' } });
+    expect(r.statusCode).toBe(403);
+    expect((await S.ca!.put(`/api/users/${p.json().id}`, { status: 'active', roles: ['data_entry'] })).statusCode).toBe(200);
+    await expect(env.login('PID-DEMO-C-ENTRY')).resolves.toBeTruthy();
   });
   it('เฉพาะส่วนกลางเพิ่มโรงพยาบาลได้', async () => {
-    expect((await S.aAdmin!.post('/api/hospitals', { hcode: 'DEMOC', name: 'รพ.ตัวอย่าง C (DEMO)' })).statusCode).toBe(403);
-    expect((await S.ca!.post('/api/hospitals', { hcode: 'DEMOC', name: 'รพ.ตัวอย่าง C (DEMO)' })).statusCode).toBe(201);
+    expect((await S.aEntry!.post('/api/hospitals', { hcode: 'DEMOD', name: 'รพ.ตัวอย่าง D (DEMO)' })).statusCode).toBe(403);
     expect((await S.aEntry!.get('/api/hospitals')).json().length).toBe(1);
   });
 });
@@ -234,7 +271,7 @@ describe('สูตรคำนวณผ่าน API', () => {
     expect(r.json().problems[0]).toMatch(/ไม่มีรายได้ตรง/);
   });
   it('ชุดสูตรที่อนุมัติคือ v1.1 (D-16)', async () => {
-    const r = (await S.aExec!.get('/api/formula-sets/current')).json();
+    const r = (await S.aEntry!.get('/api/formula-sets/current')).json();
     expect(r.version).toBe('1.1');
     expect(r.definition.paybackDivisor).toBe('min_age_data_years');
     expect(r.definition.weights.utilization).toBe(0.25);

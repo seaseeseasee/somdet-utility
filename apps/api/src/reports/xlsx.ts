@@ -78,7 +78,7 @@ export async function buildWorkbook(d: ReportData): Promise<Buffer> {
       x.code, x.name, sc.utilization, sc.clinical, sc.financial, sc.reliability, sc.satisfaction, sc.strategic, x.breakdown.utilityScore,
       { formula: `C${n}*C$2+D${n}*D$2+E${n}*E$2+F${n}*F$2+G${n}*G$2+H${n}*H$2`, result: x.breakdown.utilityScore },
       { formula: `ROUND(J${n}-I${n},6)`, result: 0 },
-      x.breakdown.ageYears, x.breakdown.paybackDivisorYears, x.breakdown.paybackYears ?? 'N/A', x.breakdown.costPerCase ?? 'N/A', x.years.join(', '),
+      x.breakdown.ageYears, x.breakdown.paybackDivisorYears, x.breakdown.paybackYears ?? 'N/A', x.breakdown.costPerCase ?? 'N/A', x.basis,
     ]);
   });
 

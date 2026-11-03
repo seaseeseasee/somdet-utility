@@ -14,6 +14,7 @@ export const SECTION_LABEL: Record<Section, string> = {
 };
 
 const name = z.string().trim().max(100).optional();
+const signDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ YYYY-MM-DD').optional();
 export const ReportQuery = z.object({
   year: z.coerce.number().int().min(2500).max(2700).optional(),
   hospitalId: z.string().uuid().optional(),
@@ -24,17 +25,23 @@ export const ReportQuery = z.object({
     .optional()
     .transform((v) => (v ? (v.split(',').filter((s) => (SECTIONS as readonly string[]).includes(s)) as Section[]) : (['kpi', 'chart', 'ranking', 'factors', 'method'] as Section[]))),
   preparedBy: name, reviewedBy: name, approvedBy: name,
+  preparedAt: signDate, reviewedAt: signDate, approvedAt: signDate,
 });
 export type ReportQuery = z.infer<typeof ReportQuery>;
 
 export interface ReportRow {
   rank: number | null; hospital: string; code: string; name: string; department: string; type: string; purchaseYear: number;
   purchasePrice: number; years: number[]; breakdown: ScoreBreakdown;
+  /** ที่มาของข้อมูลที่ใช้คิดคะแนน: ปีงบที่ยืนยันแล้ว หรือข้อมูลสะสมจากไฟล์ Excel */
+  basis: string;
 }
 export interface ReportData {
   title: string; subtitle: string; scopeLabel: string; year: number; window: { from: number; to: number };
   formulaVersion: string; formulaDefinition: Record<string, unknown>; generatedAt: Date; generatedBy: string;
-  sections: Section[]; sort: ReportQuery['sort']; signatures: { preparedBy?: string; reviewedBy?: string; approvedBy?: string };
+  sections: Section[]; sort: ReportQuery['sort']; signatures: {
+    preparedBy?: string; reviewedBy?: string; approvedBy?: string;
+    preparedAt?: string; reviewedAt?: string; approvedAt?: string;
+  };
   kpis: { equipment: number; totalValue: number; scored: number; averageScore: number | null; high: number; good: number; medium: number; low: number; warning: number };
   rows: ReportRow[];
   notScored: { hospital: string; code: string; name: string; reason: string }[];
@@ -65,7 +72,8 @@ export async function buildReportData(db: Db, u: CurrentUser, q: ReportQuery): P
     const e = r.equipment;
     if (r.outcome.status === 'scored')
       rows.push({ rank: r.rank, hospital: e.hospital_name ?? '', code: e.code, name: e.name, department: e.department_name ?? '', type: e.type_name ?? '',
-        purchaseYear: e.purchase_year_be, purchasePrice: e.purchase_price, years: r.outcome.years, breakdown: r.outcome.breakdown });
+        purchaseYear: e.purchase_year_be, purchasePrice: e.purchase_price, years: r.outcome.years, breakdown: r.outcome.breakdown,
+        basis: r.outcome.source === 'excel' ? 'ข้อมูลสะสมจากไฟล์ Excel' : r.outcome.years.join(', ') });
     else notScored.push({ hospital: e.hospital_name ?? '', code: e.code, name: e.name, reason: r.outcome.problems.slice(0, 2).join(' · ') });
   }
   const cmp: Record<ReportQuery['sort'], (a: ReportRow, b: ReportRow) => number> = {
@@ -101,7 +109,10 @@ export async function buildReportData(db: Db, u: CurrentUser, q: ReportQuery): P
     generatedBy: u.name,
     sections: q.sections,
     sort: q.sort,
-    signatures: { preparedBy: q.preparedBy, reviewedBy: q.reviewedBy, approvedBy: q.approvedBy },
+    signatures: {
+      preparedBy: q.preparedBy, reviewedBy: q.reviewedBy, approvedBy: q.approvedBy,
+      preparedAt: q.preparedAt, reviewedAt: q.reviewedAt, approvedAt: q.approvedAt,
+    },
     kpis: {
       equipment: all.length,
       totalValue: all.reduce((s, r) => s + r.equipment.purchase_price, 0),

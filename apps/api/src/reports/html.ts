@@ -88,7 +88,7 @@ export function renderReportHtml(d: ReportData): string {
     <tbody>${d.rows.map((r) => { const s = r.breakdown.scores; return `<tr><td>${esc(r.code)}<br><span class="m">${esc(r.name)}</span></td>
       <td class="r">${n(s.utilization)}</td><td class="r">${n(s.clinical)}</td><td class="r">${n(s.financial)}</td><td class="r">${n(s.reliability)}</td><td class="r">${n(s.satisfaction)}</td><td class="r">${n(s.strategic)}</td>
       <td class="r">${r.breakdown.paybackYears === null ? 'N/A' : n(r.breakdown.paybackYears, 2)}</td><td class="r">${r.breakdown.costPerCase === null ? 'N/A' : baht(r.breakdown.costPerCase)}</td>
-      <td class="r"><b>${n(r.breakdown.utilityScore, 2)}</b></td><td>${esc(r.years.join(', '))}</td></tr>`; }).join('')}</tbody></table>`;
+      <td class="r"><b>${n(r.breakdown.utilityScore, 2)}</b></td><td>${esc(r.basis)}</td></tr>`; }).join('')}</tbody></table>`;
   const annual = `<h2 class="pb">ภาคผนวก: ข้อมูลรายปีที่ใช้คำนวณ (ยืนยันแล้ว)</h2>
     <table class="sm"><thead><tr><th>รายการ</th><th class="c">ปีงบ</th><th class="r">ชม.พร้อมใช้</th><th class="r">ชม.ใช้จริง</th><th class="r">ชม.หยุด</th><th class="r">เคส</th><th class="r">ค่าบำรุงรักษา</th><th class="r">รายได้</th><th class="c">คะแนน 1–5<br>C/S/St</th></tr></thead>
     <tbody>${d.annual.map((a) => { const m = ['repairCost', 'partsCost', 'pmCost', 'calibrationCost', 'otherCost'].reduce((s, f) => s + Number(a[f] ?? 0), 0);
@@ -110,7 +110,9 @@ export function renderReportHtml(d: ReportData): string {
     ? `<h2>รายการที่ยังไม่มีคะแนน (${d.notScored.length})</h2><table class="sm"><thead><tr><th>รายการ</th>${multi ? '<th>โรงพยาบาล</th>' : ''}<th>เหตุผล</th></tr></thead><tbody>${d.notScored
         .map((r) => `<tr><td>${esc(r.code)} ${esc(r.name)}</td>${multi ? `<td>${esc(r.hospital)}</td>` : ''}<td>${esc(r.reason)}</td></tr>`).join('')}</tbody></table>`
     : '';
-  const sig = (label: string, who?: string) => `<div><div class="line">${esc(who ?? '')}</div>${esc(label)}<br><span class="m">วันที่ ........./........./.........</span></div>`;
+  // ไม่ระบุวันที่ = เว้นเส้นไว้ให้เขียนด้วยมือ
+  const signedOn = (d?: string) => (d ? esc(thaiDate(new Date(`${d}T00:00:00+07:00`))) : '........./........./.........');
+  const sig = (label: string, who?: string, on?: string) => `<div><div class="line">${esc(who ?? '')}</div>${esc(label)}<br><span class="m">วันที่ ${signedOn(on)}</span></div>`;
 
   return `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>${esc(d.title)}</title><style>
     ${fonts()}
@@ -150,7 +152,7 @@ export function renderReportHtml(d: ReportData): string {
     ${has('factors') ? factors : ''}
     ${notScored}
     ${has('method') ? method : ''}
-    <div class="sig">${sig('ผู้จัดทำ', d.signatures.preparedBy)}${sig('ผู้ตรวจสอบ', d.signatures.reviewedBy)}${sig('ผู้อนุมัติ', d.signatures.approvedBy)}</div>
+    <div class="sig">${sig('ผู้จัดทำ', d.signatures.preparedBy, d.signatures.preparedAt)}${sig('ผู้ตรวจสอบ', d.signatures.reviewedBy, d.signatures.reviewedAt)}${sig('ผู้อนุมัติ', d.signatures.approvedBy, d.signatures.approvedAt)}</div>
     ${has('annual') ? annual : ''}
     <p class="note">ส่วนที่แสดง: ${d.sections.map((s) => esc(SECTION_LABEL[s])).join(' · ')} · ตัวเลขทั้งหมดมาจากข้อมูลที่ยืนยันแล้วในระบบ ณ เวลาที่จัดทำรายงาน</p>
   </body></html>`;

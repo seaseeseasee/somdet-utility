@@ -1,16 +1,14 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from './lib/auth';
 
-type Item = { to: string; label: string; perm?: string; soon?: string; central?: boolean };
+type Item = { to: string; label: string; perm?: string; soon?: string; central?: boolean; end?: boolean };
 const NAV: [string, Item[]][] = [
   ['ภาพรวม', [
     { to: '/network', label: 'ภาพรวมเครือข่าย', central: true },
     { to: '/dashboard', label: 'Dashboard โรงพยาบาล', perm: 'dashboard.view' },
   ]],
   ['ครุภัณฑ์', [
-    { to: '/due', label: 'ครบกำหนดประเมิน', perm: 'equipment.read' },
     { to: '/equipment', label: 'ทะเบียนครุภัณฑ์', perm: 'equipment.read' },
-    { to: '/review', label: 'รอตรวจสอบ / ยืนยัน', perm: 'equipment.read' },
   ]],
   ['วิเคราะห์', [
     { to: '/scores', label: 'ผลวิเคราะห์ Utility Score', perm: 'dashboard.view' },
@@ -18,7 +16,7 @@ const NAV: [string, Item[]][] = [
   ]],
   ['ระบบ', [{ to: '/users', label: 'ผู้ใช้งานและสิทธิ์', perm: 'users.manage' }]],
 ];
-const TITLES: Record<string, string> = { equipment: 'ทะเบียนครุภัณฑ์', users: 'ผู้ใช้งานและสิทธิ์', due: 'รายการครบกำหนดประเมิน', review: 'รอตรวจสอบ / ยืนยัน', scores: 'ผลการวิเคราะห์ Utility Score', dashboard: 'Dashboard โรงพยาบาล', network: 'Dashboard ภาพรวมเครือข่าย', reports: 'รายงานสำหรับผู้บริหาร' };
+const TITLES: Record<string, string> = { equipment: 'ทะเบียนครุภัณฑ์', users: 'ผู้ใช้งานและสิทธิ์', scores: 'ผลการวิเคราะห์ Utility Score', dashboard: 'Dashboard โรงพยาบาล', network: 'Dashboard ภาพรวมเครือข่าย', reports: 'รายงานสำหรับผู้บริหาร' };
 
 export function Layout() {
   const { me, logout, can } = useAuth();
@@ -44,7 +42,7 @@ export function Layout() {
               <div key={g} style={{ display: 'contents' }}>
                 <div className="grp">{g}</div>
                 {vis.map((i) => (
-                  <NavLink key={i.to} to={i.to}>
+                  <NavLink key={i.to} to={i.to} end={i.end}>
                     {i.label}
                     {i.soon && <span className="soon" title="อยู่ระหว่างพัฒนา">{i.soon}</span>}
                   </NavLink>
@@ -61,7 +59,7 @@ export function Layout() {
         <header className="top">
           <div>
             <div className="crumb">ระบบวิเคราะห์ความคุ้มค่าครุภัณฑ์</div>
-            <h1>{loc.pathname.includes('/annual/') ? 'บันทึกข้อมูลรายปี' : (TITLES[section] ?? '')}</h1>
+            <h1>{loc.pathname.includes('/annual/') ? 'บันทึกข้อมูลรายปี' : loc.pathname === '/equipment/import' ? 'นำเข้าครุภัณฑ์จากไฟล์ Excel' : (TITLES[section] ?? '')}</h1>
           </div>
           <div className="sp" />
           <span className="pill hosp">{me.hospital?.name ?? 'ทุกโรงพยาบาล (ส่วนกลาง)'}</span>

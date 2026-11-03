@@ -65,12 +65,12 @@ export function Network() {
           <div style={{ padding: '16px 20px 4px' }}>
             <h3>สรุปรายโรงพยาบาล</h3>
             <div className="legend" style={{ marginTop: 4 }}>
-              <span>ความคืบหน้า:</span><span><i style={{ background: 'var(--good)' }} />ยืนยัน</span><span><i style={{ background: '#e0a100' }} />รอตรวจ</span><span><i style={{ background: 'var(--sky)' }} />กำลังบันทึก</span><span><i style={{ background: '#c9d2de' }} />ยังไม่เริ่ม</span>
+              <span>ความคืบหน้า:</span><span><i style={{ background: 'var(--good)' }} />ยืนยัน</span><span><i style={{ background: 'var(--sky)' }} />กำลังบันทึก</span><span><i style={{ background: '#c9d2de' }} />ยังไม่เริ่ม</span>
               <span style={{ marginLeft: 12 }}>ระดับคะแนน:</span><span><i style={{ background: 'var(--good)' }} />≥80</span><span><i style={{ background: 'var(--blue-2)' }} />60–79</span><span><i style={{ background: '#e0a100' }} />40–59</span><span><i style={{ background: 'var(--bad)' }} />&lt;40</span><span><i className="na" style={{ background: 'repeating-linear-gradient(45deg,#e1e7ef 0 3px,#f4f6f9 3px 6px)' }} />ไม่มีคะแนน</span>
             </div>
           </div>
           <div className="tbl-wrap"><table className="tbl compact">
-            <thead><tr><th>โรงพยาบาล</th><th className="r">ครุภัณฑ์</th><th className="r">มูลค่า (ลบ.)</th><th>รอบประเมิน {d.year}</th><th className="c">Score เฉลี่ย</th><th>ระดับคะแนน</th><th></th></tr></thead>
+            <thead><tr><th>โรงพยาบาล</th><th className="r">ครุภัณฑ์</th><th className="r">มูลค่า (ลบ.)</th><th>ข้อมูลปี {d.year}</th><th className="c">Score เฉลี่ย</th><th>ระดับคะแนน</th><th></th></tr></thead>
             <tbody>{d.hospitals.map((h) => {
               const p = h.progress;
               const dist = h.distribution;
@@ -80,14 +80,10 @@ export function Network() {
                   <td className="r num">{h.equipment}</td>
                   <td className="r num">{mb(h.totalValue)}</td>
                   <td style={{ minWidth: 170 }}>
-                    {h.cycle ? (
-                      <>
-                        <div className="stackbar" aria-label={`ยืนยัน ${p.approved} จาก ${p.total}`}>
-                          {([['var(--good)', p.approved], ['#e0a100', p.submitted], ['var(--sky)', p.inProgress], ['#c9d2de', p.notStarted]] as [string, number][]).map(([c, v], i) => <span key={i} style={{ width: `${p.total ? (v / p.total) * 100 : 0}%`, background: c }} />)}
-                        </div>
-                        <div className="muted num">ยืนยัน {p.approved}/{p.total} · {h.cycle.status === 'open' ? 'เปิดรับ' : 'ปิดรอบแล้ว'}</div>
-                      </>
-                    ) : <span className="chip r">ยังไม่เปิดรอบ</span>}
+                    <div className="stackbar" aria-label={`ยืนยัน ${p.approved} จาก ${p.total}`}>
+                      {([['var(--good)', p.approved], ['var(--sky)', p.inProgress], ['#c9d2de', p.notStarted]] as [string, number][]).map(([c, v], i) => <span key={i} style={{ width: `${p.total ? (v / p.total) * 100 : 0}%`, background: c }} />)}
+                    </div>
+                    <div className="muted num">ยืนยัน {p.approved}/{p.total}</div>
                   </td>
                   <td className="c">{h.averageScore !== null ? <ScoreBadge v={h.averageScore} /> : '—'}</td>
                   <td style={{ minWidth: 150 }}>
@@ -129,7 +125,7 @@ export function Network() {
               {!follow.length && <div className="note blue">ไม่มีรายการที่ต้องติดตาม</div>}
               {follow.slice(0, 10).map((f, i) => <div key={i} className={`note ${f.level === 'red' ? 'red' : ''}`}><b>{short(f.hospital)}</b> · {f.text}</div>)}
               {follow.length > 10 && <div className="muted">และอีก {follow.length - 10} รายการ</div>}
-              <div className="note blue" style={{ fontSize: 12.5 }}>รายการนี้มาจากกฎความครบถ้วนของข้อมูล (เช่น หมวดที่กรอกต่ำกว่า 50% หรือยังไม่เปิดรอบ) ไม่ได้มาจากสูตร Utility Score</div>
+              <div className="note blue" style={{ fontSize: 12.5 }}>รายการนี้มาจากกฎความครบถ้วนของข้อมูล (เช่น หมวดที่กรอกต่ำกว่า 50% หรือยังยืนยันไม่ครบ) ไม่ได้มาจากสูตร Utility Score</div>
             </div>
           </div>
         </>

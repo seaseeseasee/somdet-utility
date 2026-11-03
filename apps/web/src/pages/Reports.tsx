@@ -16,7 +16,7 @@ export function Reports() {
   const [hospital, setHospital] = useState('');
   const [dept, setDept] = useState('');
   const [sort, setSort] = useState('score_desc');
-  const [sig, setSig] = useState({ preparedBy: '', reviewedBy: '', approvedBy: '' });
+  const [sig, setSig] = useState({ preparedBy: '', reviewedBy: '', approvedBy: '', preparedAt: '', reviewedAt: '', approvedAt: '' });
   const [opts, setOpts] = useState<Option[]>([]);
   const [html, setHtml] = useState<string | null>(null);
   const [recent, setRecent] = useState<Recent[]>([]);
@@ -74,9 +74,12 @@ export function Reports() {
             <div className="stack" style={{ gap: 6, fontSize: 14 }}>
               {sections.map((s) => <label key={s.key} className="hrow" style={{ fontWeight: 400 }}><input type="checkbox" checked={sel.includes(s.key)} onChange={() => toggle(s.key)} />{s.label}</label>)}
             </div></div>
-          <div className="fld"><label>ชื่อผู้ลงนาม (ไม่บังคับ)</label>
-            {([['preparedBy', 'ผู้จัดทำ'], ['reviewedBy', 'ผู้ตรวจสอบ'], ['approvedBy', 'ผู้อนุมัติ']] as const).map(([k, l]) => (
-              <input key={k} className="in" aria-label={l} placeholder={l} maxLength={100} value={sig[k]} onChange={(e) => setSig({ ...sig, [k]: e.target.value })} style={{ marginBottom: 6 }} />
+          <div className="fld"><label>ชื่อและวันที่ลงนาม (ไม่บังคับ)</label>
+            {([['preparedBy', 'preparedAt', 'ผู้จัดทำ'], ['reviewedBy', 'reviewedAt', 'ผู้ตรวจสอบ'], ['approvedBy', 'approvedAt', 'ผู้อนุมัติ']] as const).map(([k, d, l]) => (
+              <div key={k} className="hrow" style={{ marginBottom: 6, gap: 6 }}>
+                <input className="in" aria-label={l} placeholder={l} maxLength={100} value={sig[k]} onChange={(e) => setSig({ ...sig, [k]: e.target.value })} style={{ flex: 1, minWidth: 0 }} />
+                <input className="in" type="date" aria-label={`วันที่ลงนาม ${l}`} title="เว้นว่าง = เว้นเส้นไว้เขียนด้วยมือ" value={sig[d]} onChange={(e) => setSig({ ...sig, [d]: e.target.value })} style={{ width: 150 }} />
+              </div>
             ))}</div>
           <div className="note blue" style={{ fontSize: 12.5 }}>รายงานใช้เฉพาะข้อมูลที่ยืนยันแล้วเสมอ และระบุเวอร์ชันสูตรในรายงาน</div>
           <div className="hrow">

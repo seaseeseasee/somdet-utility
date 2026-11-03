@@ -9,7 +9,10 @@ const ROLE_LABEL: Record<string, string> = {
   central_admin: 'ผู้ดูแลระบบส่วนกลาง', central_executive: 'ผู้บริหารส่วนกลาง', hospital_admin: 'ผู้ดูแลระบบโรงพยาบาล',
   data_entry: 'เจ้าหน้าที่บันทึกข้อมูล', reviewer: 'ผู้ตรวจสอบ', executive: 'ผู้บริหารโรงพยาบาล',
 };
-const HOSPITAL_ROLES = ['hospital_admin', 'data_entry', 'reviewer', 'executive'];
+// แต่ละโรงพยาบาลมีผู้ใช้ 1 คน คือเจ้าหน้าที่บันทึกข้อมูล
+const HOSPITAL_ROLES = ['data_entry'];
+// ส่วนกลางมีบทบาทเดียว (รวมสิทธิ์ผู้บริหารส่วนกลางเดิมไว้แล้ว)
+const CENTRAL_ROLES = ['central_admin'];
 const STATUS: Record<string, [string, string]> = { active: ['ใช้งาน', 'g'], pending: ['รออนุมัติ', 'w'], suspended: ['ระงับ', 'r'] };
 
 export function Users() {
@@ -18,7 +21,7 @@ export function Users() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [hospitals, setHospitals] = useState<Option[]>([]);
   const [msg, setMsg] = useState<{ tone: string; text: string } | null>(null);
-  const [form, setForm] = useState({ providerId: '', name: '', hospitalId: '', roles: ['data_entry'] as string[] });
+  const [form, setForm] = useState({ providerId: '', name: '', hospitalId: '', roles: [] as string[] });
   const [editing, setEditing] = useState<string | null>(null);
   const [editRoles, setEditRoles] = useState<string[]>([]);
 
@@ -28,7 +31,7 @@ export function Users() {
     if (central) api.get<Option[]>('/api/hospitals').then(setHospitals);
   }, [central]);
 
-  const roleChoices = (hospitalId: string | null) => (hospitalId ? HOSPITAL_ROLES : ['central_admin', 'central_executive']);
+  const roleChoices = (hospitalId: string | null) => (hospitalId ? HOSPITAL_ROLES : CENTRAL_ROLES);
   const fail = (e: unknown) => setMsg({ tone: 'red', text: e instanceof ApiError ? e.message : 'ดำเนินการไม่สำเร็จ' });
 
   const add = async (e: FormEvent) => {
@@ -36,7 +39,7 @@ export function Users() {
     try {
       await api.post('/api/users', { ...form, hospitalId: central ? form.hospitalId || null : undefined });
       setMsg({ tone: 'blue', text: `เพิ่มผู้ใช้ ${form.name} แล้ว` });
-      setForm({ providerId: '', name: '', hospitalId: '', roles: ['data_entry'] });
+      setForm({ providerId: '', name: '', hospitalId: '', roles: [] });
       void load();
     } catch (x) { fail(x); }
   };
@@ -52,7 +55,7 @@ export function Users() {
 
   return (
     <>
-      <div className="note blue">ผู้ใช้เข้าสู่ระบบด้วย Provider ID ระบบเก็บเฉพาะ Provider ID และข้อมูลพื้นฐาน ไม่เก็บรหัสผ่าน · ผู้ใช้ที่ยังไม่มีบทบาทจะมีสถานะ “รออนุมัติ”</div>
+      <div className="note blue">ผู้ใช้เข้าสู่ระบบด้วย Provider ID ระบบเก็บเฉพาะ Provider ID และข้อมูลพื้นฐาน ไม่เก็บรหัสผ่าน · ผู้ใช้ที่ยังไม่มีบทบาทจะมีสถานะ “รออนุมัติ” · เจ้าหน้าที่ที่เข้าสู่ระบบด้วย Provider ID ครั้งแรกได้บัญชีอัตโนมัติ แต่ละโรงพยาบาลมีเจ้าหน้าที่ 1 คน คนใหม่แทนคนเดิม</div>
       {msg && <div className={`note ${msg.tone}`} role="status">{msg.text}</div>}
       <form className="card stack" onSubmit={add}>
         <h3>เพิ่มผู้ใช้ด้วย Provider ID</h3>
@@ -63,7 +66,7 @@ export function Users() {
             <input id="nm" className="in" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></div>
           {central && (
             <div className="fld" style={{ width: 260 }}><label htmlFor="hs">โรงพยาบาล</label>
-              <select id="hs" className="in" value={form.hospitalId} onChange={(e) => setForm({ ...form, hospitalId: e.target.value, roles: [] })}>
+              <select id="hs" className="in" value={form.hospitalId} onChange={(e) => setForm({ ...form, hospitalId: e.target.value, roles: e.target.value ? ['data_entry'] : [] })}>
                 <option value="">— ส่วนกลาง —</option>
                 {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
               </select></div>

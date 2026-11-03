@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { AnnualBody, COLUMN, evaluate, FIELDS, fiscalRange, fiscalYearOf, rowToBody } from '../annual.js';
-import { can, requirePerm, type CurrentUser } from '../auth.js';
+import { requirePerm, type CurrentUser } from '../auth.js';
 import { writeAudit } from '../audit.js';
 import { withTx, type Db } from '../db.js';
 import { HttpError } from '../errors.js';
@@ -133,7 +133,7 @@ export async function annualRoutes(app: FastifyInstance, { pool }: AppDeps) {
         await writeAudit(db, { hospitalId: e.hospital_id, ...auditCtx(req, u), action: 'create', entity: 'annual_record', entityId: r.rows[0].id, after: r.rows[0] });
       } else {
         if (existing.status !== 'draft')
-          throw new HttpError(409, `ข้อมูลปี ${year} อยู่ในสถานะ "${STATUS_LABEL[existing.status]}" แก้ไขไม่ได้ ต้องให้ผู้ดูแลระบบโรงพยาบาลปลดล็อกก่อน`);
+          throw new HttpError(409, `ข้อมูลปี ${year} อยู่ในสถานะ "${STATUS_LABEL[existing.status]}" แก้ไขไม่ได้ ต้องปลดล็อกเพื่อแก้ไขก่อน`);
         if (version !== undefined && version !== existing.version)
           throw new HttpError(409, 'ข้อมูลถูกแก้ไขโดยผู้อื่นระหว่างที่ท่านแก้ไข กรุณาโหลดข้อมูลล่าสุดแล้วแก้ไขอีกครั้ง');
         const r = await db.query(
@@ -147,55 +147,31 @@ export async function annualRoutes(app: FastifyInstance, { pool }: AppDeps) {
     });
   });
 
-  /** ส่งให้ผู้ตรวจสอบ — ต้องไม่มีข้อผิดพลาด และระบุเหตุผลเมื่อมีข้อสังเกต */
+  /**
+   * ยืนยันข้อมูล — เจ้าหน้าที่ซึ่งเข้าสู่ระบบด้วย Provider ID ยืนยันข้อมูลของตนเองได้ทันที
+   * ต้องไม่มีข้อผิดพลาด และระบุเหตุผลเมื่อมีข้อสังเกต ผู้ยืนยันและเวลาบันทึกใน audit
+   */
   app.post('/api/annual/:id/submit', async (req) => {
     const u = requirePerm(req, 'annual.write');
     const { id } = z.object({ id: Uuid }).parse(req.params);
     return withTx(pool, u.scope, async (db) => {
       const r = await recordById(db, id, true);
-      if (r.status !== 'draft') throw new HttpError(409, `ข้อมูลอยู่ในสถานะ "${STATUS_LABEL[r.status]}" ส่งตรวจซ้ำไม่ได้`);
+      if (r.status !== 'draft') throw new HttpError(409, `ข้อมูลอยู่ในสถานะ "${STATUS_LABEL[r.status]}" ยืนยันซ้ำไม่ได้`);
       const e = await equipmentOf(db, r.equipment_id);
       const ev = evaluate(rowToBody(r), r.fiscal_year_be, await previousApproved(db, r.equipment_id, r.fiscal_year_be), { purchasePrice: e.purchase_price, usefulLifeYears: e.useful_life_years });
-      if (ev.errors.length) throw new HttpError(422, `ยังส่งตรวจไม่ได้ พบข้อผิดพลาด ${ev.errors.length} รายการ`, ev.errors);
-      if (ev.needsChangeReason) throw new HttpError(422, 'มีข้อสังเกต กรุณาระบุเหตุผลก่อนส่งตรวจ', [{ field: 'changeReason', message: 'กรุณาระบุเหตุผลของการเปลี่ยนแปลง' }]);
-      await db.query("UPDATE annual_record SET status = 'submitted', submitted_at = now(), version = version + 1 WHERE id = $1", [id]);
-      await review(db, id, r.hospital_id, 'submit', u.id);
-      await writeAudit(db, { hospitalId: r.hospital_id, ...auditCtx(req, u), action: 'submit', entity: 'annual_record', entityId: id, before: { status: r.status }, after: { status: 'submitted' } });
+      if (ev.errors.length) throw new HttpError(422, `ยังยืนยันไม่ได้ พบข้อผิดพลาด ${ev.errors.length} รายการ`, ev.errors);
+      if (ev.needsChangeReason) throw new HttpError(422, 'มีข้อสังเกต กรุณาระบุเหตุผลก่อนยืนยัน', [{ field: 'changeReason', message: 'กรุณาระบุเหตุผลของการเปลี่ยนแปลง' }]);
+      await db.query(
+        "UPDATE annual_record SET status = 'approved', submitted_at = now(), approved_by = $2, approved_at = now(), version = version + 1 WHERE id = $1",
+        [id, u.id],
+      );
+      await review(db, id, r.hospital_id, 'approve', u.id, `ยืนยันโดย Provider ID ${u.providerId}`);
+      await writeAudit(db, { hospitalId: r.hospital_id, ...auditCtx(req, u), action: 'approve', entity: 'annual_record', entityId: id, before: { status: r.status }, after: { status: 'approved', providerId: u.providerId } });
       return detail(db, r.equipment_id, r.fiscal_year_be);
     });
   });
 
-  /** ยืนยัน — ผู้บันทึกหรือผู้แก้ไขล่าสุดยืนยันข้อมูลของตนเองไม่ได้ (Segregation of Duties) */
-  app.post('/api/annual/:id/approve', async (req) => {
-    const u = requirePerm(req, 'annual.review');
-    const { id } = z.object({ id: Uuid }).parse(req.params);
-    const { note } = z.object({ note: z.string().trim().max(2000).optional() }).parse(req.body ?? {});
-    return withTx(pool, u.scope, async (db) => {
-      const r = await recordById(db, id, true);
-      if (r.status !== 'submitted') throw new HttpError(409, 'ยืนยันได้เฉพาะข้อมูลที่อยู่ในสถานะ "รอตรวจสอบ"');
-      if (r.created_by === u.id || r.updated_by === u.id) throw new HttpError(403, 'ไม่สามารถยืนยันข้อมูลที่ท่านเป็นผู้บันทึกหรือแก้ไขเอง');
-      await db.query("UPDATE annual_record SET status = 'approved', approved_by = $2, approved_at = now(), version = version + 1 WHERE id = $1", [id, u.id]);
-      await review(db, id, r.hospital_id, 'approve', u.id, note);
-      await writeAudit(db, { hospitalId: r.hospital_id, ...auditCtx(req, u), action: 'approve', entity: 'annual_record', entityId: id, before: { status: r.status }, after: { status: 'approved', note: note ?? null } });
-      return detail(db, r.equipment_id, r.fiscal_year_be);
-    });
-  });
-
-  app.post('/api/annual/:id/reject', async (req) => {
-    const u = requirePerm(req, 'annual.review');
-    const { id } = z.object({ id: Uuid }).parse(req.params);
-    const { reason } = z.object({ reason: z.string().trim().min(5, 'กรุณาระบุเหตุผลที่ตีกลับ (อย่างน้อย 5 ตัวอักษร)').max(2000) }).parse(req.body ?? {});
-    return withTx(pool, u.scope, async (db) => {
-      const r = await recordById(db, id, true);
-      if (r.status !== 'submitted') throw new HttpError(409, 'ตีกลับได้เฉพาะข้อมูลที่อยู่ในสถานะ "รอตรวจสอบ"');
-      await db.query("UPDATE annual_record SET status = 'draft', submitted_at = NULL, version = version + 1 WHERE id = $1", [id]);
-      await review(db, id, r.hospital_id, 'reject', u.id, reason);
-      await writeAudit(db, { hospitalId: r.hospital_id, ...auditCtx(req, u), action: 'reject', entity: 'annual_record', entityId: id, before: { status: r.status }, after: { status: 'draft', reason } });
-      return detail(db, r.equipment_id, r.fiscal_year_be);
-    });
-  });
-
-  /** ปลดล็อกข้อมูลที่ยืนยัน/ล็อกแล้วกลับเป็นร่าง — ต้องมีเหตุผล และบันทึก audit */
+  /** ปลดล็อกข้อมูลที่ยืนยันแล้วกลับเป็นร่าง — ต้องมีเหตุผล และบันทึก audit */
   app.post('/api/annual/:id/unlock', async (req) => {
     const u = requirePerm(req, 'annual.unlock');
     const { id } = z.object({ id: Uuid }).parse(req.params);
@@ -250,23 +226,6 @@ export async function annualRoutes(app: FastifyInstance, { pool }: AppDeps) {
       if (!m) throw new HttpError(404, 'ไม่พบรายการ');
       await writeAudit(db, { hospitalId: r.hospital_id, ...auditCtx(req, u), action: 'delete', entity: 'maintenance_event', entityId: eventId, before: m });
       return { ok: true };
-    });
-  });
-
-  /** คิวรอตรวจสอบของโรงพยาบาล */
-  app.get('/api/review-queue', async (req) => {
-    const u = requirePerm(req, 'equipment.read');
-    return withTx(pool, u.scope, async (db) => {
-      const rows = (
-        await db.query(
-          `SELECT a.id, a.fiscal_year_be, a.submitted_at, a.created_by, a.updated_by, e.id AS equipment_id, e.code, e.name,
-                  d.name AS department_name, h.name AS hospital_name, ub.name AS updated_by_name
-             FROM annual_record a JOIN equipment e ON e.id = a.equipment_id JOIN department d ON d.id = e.department_id
-             JOIN hospital h ON h.id = a.hospital_id LEFT JOIN app_user ub ON ub.id = a.updated_by
-            WHERE a.status = 'submitted' ORDER BY a.submitted_at`,
-        )
-      ).rows;
-      return rows.map((r) => ({ ...r, canApprove: can(u, 'annual.review') && r.created_by !== u.id && r.updated_by !== u.id }));
     });
   });
 }

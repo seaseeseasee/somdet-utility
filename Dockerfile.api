@@ -1,5 +1,8 @@
 # Backend (Fastify) + สคริปต์ migrate/seed — ใช้ image เดียวกัน
 FROM node:22-alpine
+# Chromium สำหรับสร้างรายงาน PDF (ฟอนต์ไทยฝังมากับรายงานแล้ว)
+RUN apk add --no-cache chromium
+ENV PDF_CHROMIUM_PATH=/usr/bin/chromium-browser
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/formula/package.json packages/formula/

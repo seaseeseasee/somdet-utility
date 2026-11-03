@@ -43,7 +43,7 @@ type EquipmentBody = z.infer<typeof EquipmentBody>;
 const COLS = `e.id, e.hospital_id, h.name AS hospital_name, e.code, e.name, e.type_id, t.name AS type_name, e.department_id, d.name AS department_name,
   e.brand, e.model, e.serial_no, e.purchase_year_be, e.budget_year_be, e.purchase_price, e.contract_no, e.funding_source,
   e.received_date, e.start_date, e.useful_life_years, e.status, e.maintenance_plan, e.status_note,
-  e.created_at, e.updated_at, e.version`;
+  e.created_at, e.updated_at, e.version, e.details_pending, e.imported_batch_id`;
 const FROM = `FROM equipment e JOIN hospital h ON h.id = e.hospital_id JOIN equipment_type t ON t.id = e.type_id JOIN department d ON d.id = e.department_id`;
 
 async function getOne(db: Db, id: string) {
@@ -73,6 +73,7 @@ export async function equipmentRoutes(app: FastifyInstance, { pool }: AppDeps) {
         typeId: Uuid.optional(),
         hospitalId: Uuid.optional(),
         minPrice: z.coerce.number().min(0).optional(),
+        pending: z.enum(['1']).optional(),
         page: z.coerce.number().int().min(1).default(1),
         pageSize: z.coerce.number().int().min(1).max(200).default(50),
       })
@@ -82,11 +83,11 @@ export async function equipmentRoutes(app: FastifyInstance, { pool }: AppDeps) {
           OR e.brand ILIKE '%'||$1||'%' OR e.model ILIKE '%'||$1||'%')
         AND ($2::text IS NULL OR e.status = $2) AND ($3::uuid IS NULL OR e.department_id = $3)
         AND ($4::uuid IS NULL OR e.type_id = $4) AND ($5::uuid IS NULL OR e.hospital_id = $5)
-        AND ($6::numeric IS NULL OR e.purchase_price >= $6)`;
-      const args = [q.q || null, q.status ?? null, q.departmentId ?? null, q.typeId ?? null, q.hospitalId ?? null, q.minPrice ?? null];
+        AND ($6::numeric IS NULL OR e.purchase_price >= $6) AND (NOT $7::boolean OR e.details_pending)`;
+      const args = [q.q || null, q.status ?? null, q.departmentId ?? null, q.typeId ?? null, q.hospitalId ?? null, q.minPrice ?? null, q.pending === '1'];
       const total = (await db.query(`SELECT count(*)::int AS n ${FROM} ${where}`, args)).rows[0].n as number;
       const rows = (
-        await db.query(`SELECT ${COLS} ${FROM} ${where} ORDER BY h.name, e.code LIMIT $7 OFFSET $8`, [
+        await db.query(`SELECT ${COLS} ${FROM} ${where} ORDER BY h.name, e.code LIMIT $8 OFFSET $9`, [
           ...args, q.pageSize, (q.page - 1) * q.pageSize,
         ])
       ).rows;
@@ -137,7 +138,7 @@ export async function equipmentRoutes(app: FastifyInstance, { pool }: AppDeps) {
         `UPDATE equipment SET code=$1, name=$2, type_id=$3, department_id=$4, brand=$5, model=$6, serial_no=$7, purchase_year_be=$8,
            budget_year_be=$9, purchase_price=$10, contract_no=$11, funding_source=$12, received_date=$13, start_date=$14,
            useful_life_years=$15, status=$16, maintenance_plan=$17, status_note=$18,
-           updated_by=$19, updated_at=now(), version = version + 1
+           updated_by=$19, updated_at=now(), version = version + 1, details_pending = false
          WHERE id=$20 AND version=$21`,
         [...values(b), u.id, id, body.version],
       );

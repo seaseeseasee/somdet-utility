@@ -32,7 +32,7 @@ const NUMERIC = [...USAGE, ...MONEY, ['revenue'], ...RELIABILITY, ...RATINGS].ma
 const TEXT = ['ratingRationale', 'clinicalNecessity', 'condition', 'inspectedAt', 'inspectionNote', 'safetyDetail', 'recallStatus', 'unitRecommendation', 'rationale', 'changeReason'];
 const UNIT_REC: Record<string, string> = { continue: 'ใช้ต่อ', increase_use: 'เพิ่มการใช้ประโยชน์', repair: 'ซ่อม', reallocate: 'ย้ายจัดสรร', replace: 'ทดแทน', decommission: 'จำหน่าย (Decommission)' };
 const KIND: Record<string, string> = { repair: 'ซ่อม', pm: 'PM', calibration: 'สอบเทียบ', other: 'อื่น ๆ' };
-const ACTION: Record<string, string> = { submit: 'ส่งตรวจสอบ', approve: 'ยืนยัน', reject: 'ตีกลับ', unlock: 'ปลดล็อก', lock: 'ล็อก (ปิดรอบ)' };
+const ACTION: Record<string, string> = { submit: 'ส่งตรวจสอบ', approve: 'ยืนยันข้อมูล', reject: 'ตีกลับ', unlock: 'ปลดล็อกเพื่อแก้ไข', lock: 'ล็อก (ปิดรอบ)' };
 const TONE: Record<string, string> = { draft: 'b', submitted: 'w', approved: 'g', locked: 'n' };
 
 const toForm = (d: Record<string, unknown> | null): Form => {
@@ -69,7 +69,7 @@ export function AnnualForm() {
   const { id, year } = useParams();
   const fy = Number(year);
   const nav = useNavigate();
-  const { me, can } = useAuth();
+  const { can } = useAuth();
   const [years, setYears] = useState<YearList | null>(null);
   const [d, setD] = useState<AnnualDetail | null>(null);
   const [form, setForm] = useState<Form>(toForm(null));
@@ -77,7 +77,7 @@ export function AnnualForm() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: string; text: string; list?: Issue[] } | null>(null);
   const [reason, setReason] = useState('');
-  const [mode, setMode] = useState<'' | 'reject' | 'unlock'>('');
+  const [unlocking, setUnlocking] = useState(false);
   const [mx, setMx] = useState({ eventDate: '', kind: 'repair', detail: '', cost: '', workOrderNo: '' });
 
   const load = useCallback(async () => {
@@ -87,11 +87,10 @@ export function AnnualForm() {
     setForm(toForm(det.data));
     setDirty(false);
   }, [id, fy]);
-  useEffect(() => { setMsg(null); setMode(''); void load().catch((e: Error) => setMsg({ tone: 'red', text: e.message })); }, [load]);
+  useEffect(() => { setMsg(null); setUnlocking(false); void load().catch((e: Error) => setMsg({ tone: 'red', text: e.message })); }, [load]);
 
   const status = d?.record?.status ?? 'new';
   const editable = can('annual.write') && (status === 'new' || status === 'draft');
-  const ownRecord = d?.record && (d.record.createdBy === me?.id || d.record.updatedBy === me?.id);
   const issues = useMemo(() => Object.fromEntries((d?.evaluation?.errors ?? []).map((e) => [e.field, e.message])), [d]);
   const ev = d?.evaluation;
 
@@ -105,7 +104,7 @@ export function AnnualForm() {
       else await load();
       setYears(await api.get<YearList>(`/api/equipment/${id}/annual`));
       setMsg({ tone: 'blue', text: ok });
-      setMode('');
+      setUnlocking(false);
       setReason('');
     } catch (e) {
       if (e instanceof ApiError) setMsg({ tone: 'red', text: e.message, list: e.issues });
@@ -118,7 +117,7 @@ export function AnnualForm() {
     setD(det);
     setDirty(false);
     return api.post<AnnualDetail>(`/api/annual/${det.record!.id}/submit`);
-  }, 'ส่งให้ผู้ตรวจสอบแล้ว');
+  }, 'ยืนยันข้อมูลแล้ว ข้อมูลนี้ใช้คำนวณ Utility Score ได้');
 
   if (!d || !years) return msg ? <div className="note red">{msg.text}</div> : <div className="empty">กำลังโหลด…</div>;
   const m = ev?.metrics;
@@ -139,10 +138,12 @@ export function AnnualForm() {
           <div className="muted">ปีงบประมาณ {fy}: {thDate(d.period.from)} – {thDate(d.period.to)}</div>
         </div>
         <div className="steps">
-          {[['draft', 'ร่าง'], ['submitted', 'ส่งตรวจสอบ'], ['approved', 'ยืนยัน'], ['locked', 'ล็อก']].map(([k, l], i) => {
-            const order = ['new', 'draft', 'submitted', 'approved', 'locked'];
-            const done = order.indexOf(status) > i + 1 || (status === 'locked' && k === 'locked');
-            const cur = order.indexOf(status) === i + 1 && !done;
+          {[['draft', 'ร่าง'], ['approved', 'ยืนยันแล้ว']].map(([k, l], i) => {
+            // ข้อมูลเดิมที่ "รอตรวจสอบ" หรือ "ล็อก" ถือว่าผ่านขั้นร่างแล้ว
+            const s = status === 'submitted' || status === 'locked' ? 'approved' : status;
+            const order = ['new', 'draft', 'approved'];
+            const done = order.indexOf(s) > i + 1 || (s === 'approved' && k === 'approved');
+            const cur = order.indexOf(s) === i + 1 && !done;
             return <span key={k} className={`st ${done ? 'done' : cur ? 'cur' : ''}`}><span className="c">{done ? '✓' : i + 1}</span>{l}</span>;
           })}
         </div>
@@ -166,7 +167,7 @@ export function AnnualForm() {
       {!editable && status !== 'new' && (
         <div className="note blue">
           {status === 'draft' ? 'ท่านดูข้อมูลได้อย่างเดียว' : `ข้อมูลอยู่ในสถานะ "${d.record?.statusLabel}" แก้ไขไม่ได้`}
-          {can('annual.unlock') && status !== 'draft' && ' · ผู้ดูแลระบบโรงพยาบาลปลดล็อกได้ (ต้องระบุเหตุผล)'}
+          {can('annual.unlock') && status !== 'draft' && ' · กด "ปลดล็อกเพื่อแก้ไข" ด้านขวาหากต้องแก้ (ต้องระบุเหตุผล)'}
         </div>
       )}
 
@@ -283,7 +284,7 @@ export function AnnualForm() {
               <span className="muted">{dirty ? 'มีการแก้ไขที่ยังไม่บันทึก' : d.record ? `บันทึกล่าสุด ${thDate(d.record.updatedAt, true)}` : 'ยังไม่ได้บันทึก'} · ข้อมูลปีอื่นไม่ถูกเขียนทับ</span>
               <div className="hrow">
                 <button className="btn" disabled={busy} onClick={() => void save()}>บันทึกร่าง</button>
-                <button className="btn p" disabled={busy} onClick={() => void submit()}>ส่งให้ผู้ตรวจสอบ</button>
+                <button className="btn p" disabled={busy} onClick={() => void submit()}>ยืนยันข้อมูล</button>
               </div>
             </div>
           )}
@@ -302,7 +303,7 @@ export function AnnualForm() {
             <div className="calc-line"><span>Cost per Use</span><b className="num">{m?.costPerUse ? baht(Math.round(m.costPerUse)) : '—'}</b><span className="f">{d.equipment.useful_life_years ? `= (ราคา ÷ ${d.equipment.useful_life_years} ปี + บำรุงรักษา) ÷ ครั้งใช้งาน` : 'ต้องกรอกอายุตามเกณฑ์ในทะเบียนก่อน'}</span></div>
             {dirty && <div className="hint">กด "บันทึกร่าง" เพื่อคำนวณใหม่</div>}
             {ev && ev.errors.length > 0 && (
-              <div className="note red"><b>พบ {ev.errors.length} รายการที่ต้องแก้ก่อนส่งตรวจ</b><ul>{ev.errors.slice(0, 6).map((e) => <li key={e.field + e.message}>{e.message}</li>)}</ul></div>
+              <div className="note red"><b>พบ {ev.errors.length} รายการที่ต้องแก้ก่อนยืนยัน</b><ul>{ev.errors.slice(0, 6).map((e) => <li key={e.field + e.message}>{e.message}</li>)}</ul></div>
             )}
             {ev && ev.warnings.length > 0 && (
               <div className="note"><b>ข้อสังเกต {ev.warnings.length} รายการ</b><ul>{ev.warnings.map((w) => <li key={w.message}>{w.message}</li>)}</ul>
@@ -310,41 +311,31 @@ export function AnnualForm() {
                   <textarea id="changeReason" className="in" value={String(form.changeReason)} onChange={set('changeReason')} disabled={!editable} /></div>
               </div>
             )}
-            {ev && !ev.errors.length && !ev.needsChangeReason && status === 'draft' && <div className="note blue">ข้อมูลครบ พร้อมส่งให้ผู้ตรวจสอบ</div>}
+            {ev && !ev.errors.length && !ev.needsChangeReason && status === 'draft' && <div className="note blue">ข้อมูลครบ พร้อมยืนยัน</div>}
           </div>
 
-          {d.record && (can('annual.review') || can('annual.unlock')) && (
+          {d.record && can('annual.unlock') && ['approved', 'locked', 'submitted'].includes(status) && (
             <div className="card stack">
-              <h3>การตรวจสอบ</h3>
-              {status === 'submitted' && can('annual.review') && (ownRecord
-                ? <div className="note">ท่านเป็นผู้บันทึกหรือแก้ไขข้อมูลนี้ จึงยืนยันเองไม่ได้ ต้องให้ผู้ตรวจสอบคนอื่นยืนยัน</div>
-                : mode !== 'reject' ? (
-                  <div className="hrow">
-                    <button className="btn p" disabled={busy} onClick={() => void act(() => api.post(`/api/annual/${d.record!.id}/approve`), 'ยืนยันข้อมูลแล้ว')}>ยืนยันข้อมูล</button>
-                    <button className="btn" onClick={() => setMode('reject')}>ตีกลับให้แก้ไข</button>
-                  </div>
-                ) : null)}
-              {mode && (
+              <h3>แก้ไขข้อมูลที่ยืนยันแล้ว</h3>
+              {unlocking ? (
                 <div className="stack">
-                  <label htmlFor="reason" style={{ fontWeight: 600, fontSize: 13 }}>{mode === 'reject' ? 'เหตุผลที่ตีกลับ' : 'เหตุผลการปลดล็อก'} <span className="req">*</span></label>
+                  <label htmlFor="reason" style={{ fontWeight: 600, fontSize: 13 }}>เหตุผลการปลดล็อก <span className="req">*</span></label>
                   <textarea id="reason" className="in" value={reason} onChange={(e) => setReason(e.target.value)} />
                   <div className="hrow">
                     <button className="btn p" disabled={busy || reason.trim().length < 5}
-                      onClick={() => void act(() => api.post(`/api/annual/${d.record!.id}/${mode}`, { reason }), mode === 'reject' ? 'ตีกลับแล้ว' : 'ปลดล็อกแล้ว ข้อมูลกลับเป็นร่าง')}>
-                      {mode === 'reject' ? 'ยืนยันตีกลับ' : 'ยืนยันปลดล็อก'}</button>
-                    <button className="btn" onClick={() => { setMode(''); setReason(''); }}>ยกเลิก</button>
+                      onClick={() => void act(() => api.post(`/api/annual/${d.record!.id}/unlock`, { reason }), 'ปลดล็อกแล้ว ข้อมูลกลับเป็นร่าง')}>
+                      ยืนยันปลดล็อก</button>
+                    <button className="btn" onClick={() => { setUnlocking(false); setReason(''); }}>ยกเลิก</button>
                   </div>
                 </div>
+              ) : (
+                <button className="btn ghost" onClick={() => setUnlocking(true)}>ปลดล็อกเพื่อแก้ไข…</button>
               )}
-              {can('annual.unlock') && ['approved', 'locked', 'submitted'].includes(status) && !mode && (
-                <button className="btn ghost" onClick={() => setMode('unlock')}>ปลดล็อกให้แก้ไข…</button>
-              )}
-              {status === 'draft' && <div className="muted">รอเจ้าหน้าที่ส่งตรวจสอบ</div>}
             </div>
           )}
 
           <div className="card stack">
-            <h3>ประวัติการตรวจสอบ</h3>
+            <h3>ประวัติการยืนยันและแก้ไข</h3>
             {!d.reviews.length && <div className="muted">ยังไม่มี</div>}
             <div className="tl">
               {d.reviews.map((r, i) => (
@@ -353,7 +344,7 @@ export function AnnualForm() {
               ))}
             </div>
           </div>
-          <button className="btn ghost" onClick={() => nav('/due')}>← กลับไปรายการครบกำหนด</button>
+          <button className="btn ghost" onClick={() => nav(`/equipment/${d.equipment.id}`)}>← กลับไปหน้าครุภัณฑ์</button>
         </div>
       </div>
     </>

@@ -3,14 +3,12 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
+const NEW = '__new';
 const DEMO_ACCOUNTS = [
   ['PID-DEMO-A-ENTRY', 'เจ้าหน้าที่บันทึกข้อมูล — รพ.ตัวอย่าง A'],
-  ['PID-DEMO-A-ADMIN', 'ผู้ดูแลระบบโรงพยาบาล — รพ.ตัวอย่าง A'],
-  ['PID-DEMO-A-REVIEW', 'ผู้ตรวจสอบ — รพ.ตัวอย่าง A'],
-  ['PID-DEMO-A-EXEC', 'ผู้บริหารโรงพยาบาล — รพ.ตัวอย่าง A'],
   ['PID-DEMO-B-ENTRY', 'เจ้าหน้าที่บันทึกข้อมูล — รพ.ตัวอย่าง B'],
   ['PID-DEMO-CA', 'ผู้ดูแลระบบส่วนกลาง'],
-  ['PID-DEMO-CE', 'ผู้บริหารส่วนกลาง'],
+  [NEW, 'เจ้าหน้าที่ใหม่ (จำลองข้อมูลจาก Provider ID)'],
 ];
 
 export function Login() {
@@ -18,6 +16,8 @@ export function Login() {
   const nav = useNavigate();
   const [cfg, setCfg] = useState<{ devLoginEnabled: boolean; oidcConfigured: boolean } | null>(null);
   const [pid, setPid] = useState(DEMO_ACCOUNTS[0]![0]);
+  // ข้อมูลที่ Provider ID จะส่งมาเมื่อเชื่อมต่อจริง ใช้สร้างบัญชีเจ้าหน้าที่ครั้งแรก
+  const [claims, setClaims] = useState({ providerId: '', name: '', hcode: '', hospitalName: '' });
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -39,7 +39,7 @@ export function Login() {
     setBusy(true);
     setMsg(null);
     try {
-      await api.post('/api/auth/dev-login', { providerId: pid });
+      await api.post('/api/auth/dev-login', pid === NEW ? claims : { providerId: pid });
       await refresh();
       nav('/');
     } catch (err) {
@@ -84,6 +84,17 @@ export function Login() {
                   ))}
                 </select>
               </div>
+              {pid === NEW && (
+                <>
+                  {([['providerId', 'Provider ID'], ['name', 'ชื่อ-สกุล'], ['hcode', 'รหัสสถานพยาบาล (hcode)'], ['hospitalName', 'ชื่อโรงพยาบาล']] as const).map(([k, l]) => (
+                    <div className="fld" key={k}>
+                      <label htmlFor={`c-${k}`}>{l}</label>
+                      <input id={`c-${k}`} className="in" required value={claims[k]} onChange={(e) => setClaims({ ...claims, [k]: e.target.value })} />
+                    </div>
+                  ))}
+                  <span className="hint">เข้าครั้งแรกระบบสร้างบัญชีเจ้าหน้าที่ให้ทันที ถ้าโรงพยาบาลมีเจ้าหน้าที่อยู่แล้ว คนเดิมจะถูกระงับ</span>
+                </>
+              )}
               <button className="btn" disabled={busy}>{busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบแบบจำลอง'}</button>
               <span className="hint">ปิดอัตโนมัติเมื่อติดตั้งจริง (NODE_ENV=production)</span>
             </form>

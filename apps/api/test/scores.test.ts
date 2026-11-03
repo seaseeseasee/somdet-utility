@@ -29,13 +29,13 @@ async function approved(code: string, fy: number, o: Record<string, unknown> = {
 
 beforeAll(async () => {
   env = await setupTestEnv();
-  for (const [k, pid] of Object.entries({ ce: 'PID-DEMO-CE', aAdmin: 'PID-DEMO-A-ADMIN', aExec: 'PID-DEMO-A-EXEC', bEntry: 'PID-DEMO-B-ENTRY' }))
+  for (const [k, pid] of Object.entries({ ca: 'PID-DEMO-CA', aEntry: 'PID-DEMO-A-ENTRY', bEntry: 'PID-DEMO-B-ENTRY' }))
     S[k] = env.as((await env.login(pid)).cookie);
-  for (const r of (await S.ce!.get('/api/equipment?pageSize=200')).json().rows) eq[r.code] = r.id;
+  for (const r of (await S.ca!.get('/api/equipment?pageSize=200')).json().rows) eq[r.code] = r.id;
 });
 afterAll(async () => env?.teardown());
 
-const scores = async (s = 'aExec', q = '') => (await S[s]!.get(`/api/scores?year=${Y}${q}`)).json();
+const scores = async (s = 'aEntry', q = '') => (await S[s]!.get(`/api/scores?year=${Y}${q}`)).json();
 const row = (r: { rows: { equipment: { code: string } }[] }, code: string) => r.rows.find((x) => x.equipment.code === code) as Record<string, any>;
 
 describe('Utility Score จากข้อมูลรายปี', () => {
@@ -78,7 +78,7 @@ describe('Utility Score จากข้อมูลรายปี', () => {
   it('D-16: เครื่องอายุเกิน 5 ปี ใช้ตัวหาร = จำนวนปีที่มีข้อมูล และข้อมูลเก่ากว่า 5 ปีงบไม่นับ', async () => {
     // DEMO-008 ซื้อ 2562 (อายุ 7 ปี ณ 2569)
     for (const fy of [2564, 2565, 2566, 2567, 2568, 2569]) await approved('DEMO-008', fy, { revenue: 500000 });
-    const d = (await S.aExec!.get(`/api/equipment/${eq['DEMO-008']}/score?year=${Y}`)).json();
+    const d = (await S.aEntry!.get(`/api/equipment/${eq['DEMO-008']}/score?year=${Y}`)).json();
     expect(d.outcome.status).toBe('scored');
     expect(d.outcome.years).toEqual([2565, 2566, 2567, 2568, 2569]);
     expect(d.outcome.breakdown.ageYears).toBe(7);
@@ -88,7 +88,7 @@ describe('Utility Score จากข้อมูลรายปี', () => {
   });
 
   it('รายละเอียด: ข้อมูลรายปี + Score รายปี + อันดับ', async () => {
-    const d = (await S.aExec!.get(`/api/equipment/${eq['DEMO-001']}/score?year=${Y}`)).json();
+    const d = (await S.aEntry!.get(`/api/equipment/${eq['DEMO-001']}/score?year=${Y}`)).json();
     expect(d.annual.map((a: { fiscalYear: number }) => a.fiscalYear)).toEqual([2566, 2567, 2568, 2569]);
     expect(d.annual[0].metrics.utilizationPctHours).toBeCloseTo(78, 9);
     expect(d.annual[0].annualScore).toBeGreaterThan(0);
@@ -99,7 +99,7 @@ describe('Utility Score จากข้อมูลรายปี', () => {
 
   it('อันดับคิดแยกแต่ละโรงพยาบาล และ รพ. อื่นมองไม่เห็น', async () => {
     for (const fy of [2568, 2569]) await approved('DEMO-B01', fy);
-    const all = await scores('ce');
+    const all = await scores('ca');
     expect(row(all, 'DEMO-B01').rank).toBe(1);
     expect(row(all, 'DEMO-001').rank).toBe(1);
     const b = await scores('bEntry');
@@ -115,15 +115,4 @@ describe('Utility Score จากข้อมูลรายปี', () => {
     expect(r.summary.average).toBeCloseTo((row(r, 'DEMO-001').utilityScore + row(r, 'DEMO-008').utilityScore) / 2, 9);
   });
 
-  it('ปิดรอบประเมินแล้วเก็บผลประเมินไว้เป็นประวัติ พร้อมเวอร์ชันสูตร', async () => {
-    const c = (await S.aAdmin!.post('/api/cycles', { fiscalYearBe: Y })).json();
-    const closed = (await S.aAdmin!.post(`/api/cycles/${c.id}/close`, {})).json();
-    // DEMO-008 งดใช้ จึงไม่อยู่ในรอบ → เก็บเฉพาะ DEMO-001
-    expect(closed.scoreSnapshots).toBe(1);
-    const d = (await S.aExec!.get(`/api/equipment/${eq['DEMO-001']}/score?year=${Y}`)).json();
-    expect(d.history.length).toBe(1);
-    expect(d.history[0].formula_version).toBe('1.1');
-    expect(d.history[0].utility_score).toBeCloseTo(75.53598131, 5);
-    expect(d.history[0].analysis_year).toBe(Y);
-  });
 });

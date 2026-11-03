@@ -181,3 +181,11 @@ button.kpi.sel { box-shadow: 0 0 0 2px var(--blue) inset; }
 .stackbar .na { background: repeating-linear-gradient(45deg, #e1e7ef 0 4px, #f4f6f9 4px 8px); }
 .tbl.hm td.cell { border: 2px solid #fff; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tbl.hm th { white-space: normal; font-size: 12px; }
+
+/* นำเข้าข้อมูลจาก Excel */
+.drop { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 16px; border: 2px dashed var(--line); border-radius: 12px; cursor: pointer; text-align: center; background: #fbfcfe; }
+.drop.on, .drop:hover { border-color: var(--blue); background: #f2f8fe; }
+.tbl tr.st-error td { background: #fff5f4; }
+.tbl tr.st-warning td { background: #fffaf0; }
+.tbl tr.st-incomplete td { color: var(--ink-3); }
+.hint.e { color: var(--bad); }

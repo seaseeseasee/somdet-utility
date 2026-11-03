@@ -13,7 +13,7 @@ const hasPdftotext = (() => { try { execFileSync('pdftotext', ['-v'], { stdio: '
 
 beforeAll(async () => {
   env = await setupTestEnv({}, { annual: true });
-  for (const [k, pid] of Object.entries({ ce: 'PID-DEMO-CE', aEntry: 'PID-DEMO-A-ENTRY', aExec: 'PID-DEMO-A-EXEC', bEntry: 'PID-DEMO-B-ENTRY' }))
+  for (const [k, pid] of Object.entries({ ca: 'PID-DEMO-CA', aEntry: 'PID-DEMO-A-ENTRY', bEntry: 'PID-DEMO-B-ENTRY' }))
     S[k] = env.as((await env.login(pid)).cookie);
   // ชื่อที่มี HTML ต้องถูก escape ในรายงาน
   await S.aEntry!.post('/api/equipment', {
@@ -26,7 +26,7 @@ afterAll(async () => env?.teardown());
 
 describe('รายงานผู้บริหาร', () => {
   it('ตัวอย่าง HTML: ข้อมูลครบ และ escape ข้อความ', async () => {
-    const r = await S.aExec!.get(`/api/reports/executive/preview?year=${Y}`);
+    const r = await S.aEntry!.get(`/api/reports/executive/preview?year=${Y}`);
     expect(r.statusCode).toBe(200);
     expect(r.headers['content-security-policy']).toContain("default-src 'none'");
     const h = r.body;
@@ -40,11 +40,11 @@ describe('รายงานผู้บริหาร', () => {
     expect(h).toMatch(/@font-face\{font-family:'Plex Thai'/);
   });
   it('เลือกส่วนที่แสดงได้', async () => {
-    const h = (await S.aExec!.get(`/api/reports/executive/preview?year=${Y}&sections=kpi`)).body;
+    const h = (await S.aEntry!.get(`/api/reports/executive/preview?year=${Y}&sections=kpi`)).body;
     expect(h).toContain('class="kpis"');
     expect(h).not.toContain('ตารางจัดอันดับและข้อเสนอแนะ</h2>');
     expect(h).not.toContain('<svg');
-    const a = (await S.aExec!.get(`/api/reports/executive/preview?year=${Y}&sections=annual,ranking&preparedBy=${encodeURIComponent('นาย ทดสอบ (DEMO)')}`)).body;
+    const a = (await S.aEntry!.get(`/api/reports/executive/preview?year=${Y}&sections=annual,ranking&preparedBy=${encodeURIComponent('นาย ทดสอบ (DEMO)')}`)).body;
     expect(a).toContain('ภาคผนวก: ข้อมูลรายปีที่ใช้คำนวณ');
     expect(a).toContain('นาย ทดสอบ (DEMO)');
   });
@@ -54,13 +54,13 @@ describe('รายงานผู้บริหาร', () => {
     expect(h).not.toContain('DEMO-001');
   });
   it('ส่วนกลางรวมทุกโรงพยาบาล พร้อมคอลัมน์โรงพยาบาล', async () => {
-    const h = (await S.ce!.get(`/api/reports/executive/preview?year=${Y}`)).body;
+    const h = (await S.ca!.get(`/api/reports/executive/preview?year=${Y}`)).body;
     expect(h).toContain('ทุกโรงพยาบาลในเครือข่าย');
     expect(h).toContain('<th>โรงพยาบาล</th>');
   });
 
   it('PDF ภาษาไทย ขนาด A4 มีเลขหน้า', async () => {
-    const r = await S.aExec!.get(`/api/reports/executive.pdf?year=${Y}&sections=kpi,chart,ranking,factors,annual,method`);
+    const r = await S.aEntry!.get(`/api/reports/executive.pdf?year=${Y}&sections=kpi,chart,ranking,factors,annual,method`);
     expect(r.statusCode).toBe(200);
     expect(r.headers['content-type']).toBe('application/pdf');
     expect(r.headers['content-disposition']).toMatch(/Utility_Report_2568_.*\.pdf/);
@@ -79,7 +79,7 @@ describe('รายงานผู้บริหาร', () => {
   }, 60000);
 
   it('Excel: 5–6 ชีต และสูตรตรวจสอบ Utility Score ตรงกับระบบ', async () => {
-    const r = await S.aExec!.get(`/api/reports/executive.xlsx?year=${Y}`);
+    const r = await S.aEntry!.get(`/api/reports/executive.xlsx?year=${Y}`);
     expect(r.statusCode).toBe(200);
     expect(r.headers['content-type']).toContain('spreadsheetml');
     const wb = new ExcelJS.Workbook();
@@ -101,7 +101,7 @@ describe('รายงานผู้บริหาร', () => {
   });
 
   it('บันทึกการส่งออกใน Audit และแสดงรายการล่าสุดเฉพาะในขอบเขต', async () => {
-    const recent = (await S.aExec!.get('/api/reports/recent')).json();
+    const recent = (await S.aEntry!.get('/api/reports/recent')).json();
     expect(recent.map((x: { after: { format: string } }) => x.after.format)).toEqual(['xlsx', 'pdf']);
     expect(recent[0].actor_name).toBe('ผู้บริหารตัวอย่าง A');
     expect((await S.bEntry!.get('/api/reports/recent')).json()).toEqual([]);

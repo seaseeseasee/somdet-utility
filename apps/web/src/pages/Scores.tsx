@@ -29,7 +29,9 @@ export function Breakdown({ equipmentId, year }: { equipmentId: string; year: nu
         {b.explanation.map((l) => <div key={l} className="f" style={{ fontSize: 12, color: 'var(--ink-2)', fontFamily: 'ui-monospace, Menlo, monospace' }}>{l}</div>)}
       </div>
       <div className="note blue" style={{ fontSize: 12.5 }}>
-        ข้อมูลที่ใช้: ปีงบ {d.outcome.years.join(', ')} (ยืนยันแล้ว) · ชุดสูตร v{b.formulaVersion}
+        {d.outcome.source === 'excel'
+          ? <>ข้อมูลที่ใช้: ข้อมูลสะสมจากไฟล์ Excel {d.outcome.imported ? `"${d.outcome.imported.filename}"` : ''} (ใช้จนกว่าจะมีข้อมูลรายปีที่ยืนยันแล้ว)</>
+          : <>ข้อมูลที่ใช้: ปีงบ {d.outcome.years.join(', ')} (ยืนยันแล้ว) · ชุดสูตร v{b.formulaVersion}</>}
         {d.rank && <> · อันดับ {d.rank} จาก {d.rankOf} ในโรงพยาบาล</>}
       </div>
       <Link className="btn sm" to={`/equipment/${equipmentId}`}>ดูรายละเอียดและข้อมูลรายปี</Link>
@@ -109,7 +111,8 @@ export function Scores() {
                   <tr key={r.equipment.id} className={`click ${sel === r.equipment.id ? 'sel' : ''}`} onClick={() => setSel(r.equipment.id)}>
                     <td className="c num">{r.rank}</td>
                     <td style={{ minWidth: 170 }}>
-                      <div style={{ fontWeight: 600 }}>{r.equipment.name}{r.warning && <span className="chip r" style={{ marginLeft: 6 }} title="Utilization < 40% หรือ Score < 50">เตือน</span>}</div>
+                      <div style={{ fontWeight: 600 }}>{r.equipment.name}{r.warning && <span className="chip r" style={{ marginLeft: 6 }} title="Utilization < 40% หรือ Score < 50">เตือน</span>}
+                        {r.source === 'excel' && <span className="chip n" style={{ marginLeft: 6 }} title="คะแนนจากข้อมูลสะสมในไฟล์ Excel จนกว่าจะมีข้อมูลรายปีที่ยืนยันแล้ว">จากไฟล์ Excel</span>}</div>
                       <div className="muted">{r.equipment.code} · {central ? r.equipment.hospitalName : r.equipment.department}</div>
                     </td>
                     {FACTORS.map(([k]) => <td key={k} className="r num">{f1(r.scores?.[k])}</td>)}

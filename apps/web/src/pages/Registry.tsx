@@ -11,6 +11,7 @@ export function Registry() {
   const [status, setStatus] = useState('');
   const [dept, setDept] = useState('');
   const [hospital, setHospital] = useState('');
+  const [pending, setPending] = useState(false);
   const [depts, setDepts] = useState<Option[]>([]);
   const [hospitals, setHospitals] = useState<Option[]>([]);
   const [data, setData] = useState<Paged<Equipment> | null>(null);
@@ -29,10 +30,11 @@ export function Registry() {
       if (status) p.set('status', status);
       if (dept) p.set('departmentId', dept);
       if (hospital) p.set('hospitalId', hospital);
+      if (pending) p.set('pending', '1');
       api.get<Paged<Equipment>>(`/api/equipment?${p}`).then(setData, (e: Error) => setError(e.message));
     }, 200);
     return () => clearTimeout(t);
-  }, [q, status, dept, hospital]);
+  }, [q, status, dept, hospital, pending]);
 
   const rows = data?.rows ?? [];
   const count = (s: string[]) => rows.filter((r) => s.includes(r.status)).length;
@@ -57,8 +59,12 @@ export function Registry() {
             <option value="">สถานะ: ทั้งหมด</option>
             {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
+          <label className="hrow" style={{ fontSize: 14 }}><input type="checkbox" checked={pending} onChange={(e) => setPending(e.target.checked)} />รอกรอกข้อมูลเพิ่ม</label>
         </div>
-        {can('equipment.write') && <Link className="btn p" to="/equipment/new">+ เพิ่มครุภัณฑ์</Link>}
+        <div className="hrow">
+          {can('utility.import') && <Link className="btn" to="/equipment/import">นำเข้าจาก Excel</Link>}
+          {can('equipment.write') && <Link className="btn p" to="/equipment/new">+ เพิ่มครุภัณฑ์</Link>}
+        </div>
       </div>
       <div className="kpis">
         <div className="kpi"><div className="l">ทั้งหมด</div><div className="v num">{data?.total ?? '—'}</div></div>
@@ -80,7 +86,11 @@ export function Registry() {
               {rows.map((r) => (
                 <tr key={r.id} className="click" onClick={() => nav(`/equipment/${r.id}`)}>
                   <td><Link className="code" to={`/equipment/${r.id}`} onClick={(e) => e.stopPropagation()}>{r.code}</Link></td>
-                  <td><div style={{ fontWeight: 600 }}>{r.name}</div><div className="muted">{r.brand} / {r.model}</div></td>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{r.name}</div>
+                    <div className="muted">{r.brand} / {r.model}
+                      {r.details_pending && <span className="chip w" style={{ marginLeft: 6 }} title="สร้างจากไฟล์ Excel ช่องที่ไฟล์ไม่มีเป็นค่าชั่วคราว">นำเข้าจาก Excel · รอกรอกข้อมูลเพิ่ม</span>}</div>
+                  </td>
                   {central && <td>{r.hospital_name}</td>}
                   <td>{r.department_name}</td>
                   <td className="muted">{r.serial_no}</td>
@@ -99,7 +109,7 @@ export function Registry() {
           </div>
         )}
       </div>
-      <div className="note blue">อายุ (ปี) = MAX(ปีปัจจุบัน − ปีที่ซื้อ, 1) ตามสูตร Excel · Utility Score จะแสดงเมื่อมีข้อมูลรายปีที่ยืนยันแล้ว (Sprint 3–4)</div>
+      <div className="note blue">อายุ (ปี) = MAX(ปีปัจจุบัน − ปีที่ซื้อ, 1) ตามสูตร Excel · ครุภัณฑ์ที่นำเข้าจาก Excel ใช้คะแนนจากไฟล์จนกว่าจะมีข้อมูลรายปีที่ยืนยันแล้ว</div>
     </>
   );
 }

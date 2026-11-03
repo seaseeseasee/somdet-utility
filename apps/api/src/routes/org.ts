@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { CENTRAL_ROLES, HOSPITAL_ROLES, requirePerm, requireUser, ROLES, type Role } from '../auth.js';
+import { ASSIGNABLE_CENTRAL_ROLES, ASSIGNABLE_HOSPITAL_ROLES, CENTRAL_ROLES, HOSPITAL_ROLES, requirePerm, requireUser, ROLES, type Role } from '../auth.js';
 import { writeAudit } from '../audit.js';
-import { withTx } from '../db.js';
+import { withTx, type Db } from '../db.js';
 import { HttpError } from '../errors.js';
 import type { AppDeps } from '../app.js';
 
@@ -65,13 +65,25 @@ export async function orgRoutes(app: FastifyInstance, { pool }: AppDeps) {
     return withTx(pool, u.scope, async (db) => (await db.query(`${userSelect} GROUP BY u.id, h.name ORDER BY u.name`)).rows);
   });
 
-  /** ตรวจว่าผู้ดูแลกำหนดบทบาทนี้ให้ผู้ใช้นี้ได้หรือไม่ */
-  function checkRoles(actor: ReturnType<typeof requireUser>, hospitalId: string | null, roles: Role[]) {
-    const central = actor.roles.includes('central_admin');
-    if (!central && hospitalId !== actor.hospitalId) throw new HttpError(403, 'จัดการได้เฉพาะผู้ใช้ในโรงพยาบาลของท่าน');
-    if (!central && roles.some((r) => CENTRAL_ROLES.includes(r))) throw new HttpError(403, 'กำหนดบทบาทส่วนกลางได้เฉพาะผู้ดูแลระบบส่วนกลาง');
+  /** ตรวจว่ากำหนดบทบาทนี้ให้ผู้ใช้นี้ได้หรือไม่ */
+  function checkRoles(hospitalId: string | null, roles: Role[]) {
     if (hospitalId === null && roles.some((r) => HOSPITAL_ROLES.includes(r))) throw new HttpError(400, 'บทบาทของโรงพยาบาลต้องระบุโรงพยาบาล');
     if (hospitalId !== null && roles.some((r) => CENTRAL_ROLES.includes(r))) throw new HttpError(400, 'บทบาทส่วนกลางต้องไม่ผูกกับโรงพยาบาล');
+    if (hospitalId !== null && roles.some((r) => !ASSIGNABLE_HOSPITAL_ROLES.includes(r)))
+      throw new HttpError(400, 'ผู้ใช้ของโรงพยาบาลมีได้เฉพาะบทบาทเจ้าหน้าที่บันทึกข้อมูล');
+    if (hospitalId === null && roles.some((r) => !ASSIGNABLE_CENTRAL_ROLES.includes(r)))
+      throw new HttpError(400, 'ผู้ใช้ส่วนกลางมีได้เฉพาะบทบาทผู้ดูแลระบบส่วนกลาง');
+  }
+
+  /** แต่ละโรงพยาบาลมีผู้ใช้ที่ยังไม่ถูกระงับได้ 1 คน */
+  async function checkOnePerHospital(db: Db, hospitalId: string | null, exceptUserId: string | null) {
+    if (hospitalId === null) return;
+    const other = await db.query(
+      "SELECT name FROM app_user WHERE hospital_id = $1 AND status <> 'suspended' AND id IS DISTINCT FROM $2 LIMIT 1",
+      [hospitalId, exceptUserId],
+    );
+    if (other.rowCount)
+      throw new HttpError(409, `โรงพยาบาลนี้มีเจ้าหน้าที่แล้ว (${other.rows[0].name}) ต้องระงับคนเดิมก่อนเพิ่มหรือเปิดใช้งานคนใหม่`);
   }
 
   app.post('/api/users', async (req, reply) => {
@@ -85,9 +97,10 @@ export async function orgRoutes(app: FastifyInstance, { pool }: AppDeps) {
         roles: z.array(z.enum(ROLES)).max(6).default([]),
       })
       .parse(req.body);
-    const hospitalId = actor.roles.includes('central_admin') ? (b.hospitalId ?? null) : actor.hospitalId;
-    checkRoles(actor, hospitalId, b.roles);
+    const hospitalId = b.hospitalId ?? null;
+    checkRoles(hospitalId, b.roles);
     const row = await withTx(pool, actor.scope, async (db) => {
+      await checkOnePerHospital(db, hospitalId, null);
       const r = (
         await db.query(
           'INSERT INTO app_user (provider_id, name, hospital_id, department_id, status) VALUES ($1,$2,$3,$4,$5) RETURNING id',
@@ -117,7 +130,8 @@ export async function orgRoutes(app: FastifyInstance, { pool }: AppDeps) {
     return withTx(pool, actor.scope, async (db) => {
       const before = (await db.query(`${userSelect} WHERE u.id = $1 GROUP BY u.id, h.name`, [id])).rows[0];
       if (!before) throw new HttpError(404, 'ไม่พบผู้ใช้');
-      checkRoles(actor, before.hospital_id, b.roles ?? before.roles);
+      if (b.roles) checkRoles(before.hospital_id, b.roles);
+      if (before.status === 'suspended' && b.status && b.status !== 'suspended') await checkOnePerHospital(db, before.hospital_id, id);
       if (b.status) await db.query('UPDATE app_user SET status = $2 WHERE id = $1', [id, b.status]);
       if (b.departmentId !== undefined) await db.query('UPDATE app_user SET department_id = $2 WHERE id = $1', [id, b.departmentId]);
       if (b.roles) {

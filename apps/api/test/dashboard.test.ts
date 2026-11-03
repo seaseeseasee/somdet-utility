@@ -16,7 +16,7 @@ async function sql(q: string, args: unknown[] = []) {
 
 beforeAll(async () => {
   env = await setupTestEnv({}, { annual: true });
-  for (const [k, pid] of Object.entries({ ce: 'PID-DEMO-CE', aAdmin: 'PID-DEMO-A-ADMIN', aExec: 'PID-DEMO-A-EXEC', bEntry: 'PID-DEMO-B-ENTRY' }))
+  for (const [k, pid] of Object.entries({ ca: 'PID-DEMO-CA', aEntry: 'PID-DEMO-A-ENTRY', bEntry: 'PID-DEMO-B-ENTRY' }))
     S[k] = env.as((await env.login(pid)).cookie);
 });
 afterAll(async () => env?.teardown());
@@ -25,7 +25,7 @@ const dash = async (s: string, q = '') => (await S[s]!.get(`/api/dashboard/hospi
 
 describe('Dashboard โรงพยาบาล', () => {
   it('KPI ตรงกับข้อมูลในฐานข้อมูล', async () => {
-    const d = await dash('aExec');
+    const d = await dash('aEntry');
     expect(d.window).toEqual({ from: 2564, to: 2568 });
     expect(d.kpis.equipment).toBe(8);
     expect(d.kpis.scored).toBe(8);
@@ -41,7 +41,7 @@ describe('Dashboard โรงพยาบาล', () => {
     expect(d.kpis.high + d.kpis.replace).toBeLessThanOrEqual(8);
   });
   it('แนวโน้มรายปี: Utilization ถ่วงน้ำหนักด้วยชั่วโมง และปีที่ไม่มีข้อมูลเป็น null', async () => {
-    const d = await dash('aExec');
+    const d = await dash('aEntry');
     expect(d.totals.map((t: { fiscalYear: number }) => t.fiscalYear)).toEqual([2564, 2565, 2566, 2567, 2568]);
     expect(d.totals[0].utilizationPct).toBeNull();
     const [u] = await sql(
@@ -55,7 +55,7 @@ describe('Dashboard โรงพยาบาล', () => {
     expect(ct.series.map((s: { utilizationPct: number | null }) => s.utilizationPct === null)).toEqual([true, true, false, false, false]);
   });
   it('ตัวกรอง 6 แบบ', async () => {
-    const codes = async (q: string) => (await dash('aExec', q)).equipment.map((e: { code: string }) => e.code).sort();
+    const codes = async (q: string) => (await dash('aEntry', q)).equipment.map((e: { code: string }) => e.code).sort();
     expect(await codes('&level=low')).toEqual(['DEMO-008']);
     expect(await codes(`&typeId=${env.seed.types['รังสีวินิจฉัย']}`)).toEqual(['DEMO-001', 'DEMO-002', 'DEMO-004', 'DEMO-005']);
     expect(await codes('&q=ct')).toEqual(['DEMO-001']);
@@ -74,10 +74,10 @@ describe('Dashboard โรงพยาบาล', () => {
 
 describe('Dashboard ภาพรวมเครือข่าย', () => {
   it('เฉพาะผู้ใช้ส่วนกลาง', async () => {
-    expect((await S.aExec!.get(`/api/dashboard/network?year=${Y}`)).statusCode).toBe(403);
+    expect((await S.aEntry!.get(`/api/dashboard/network?year=${Y}`)).statusCode).toBe(403);
   });
   it('แต่ละโรงพยาบาลมีข้อมูลแบบไหน', async () => {
-    const n = (await S.ce!.get(`/api/dashboard/network?year=${Y}`)).json();
+    const n = (await S.ca!.get(`/api/dashboard/network?year=${Y}`)).json();
     expect(n.kpis.hospitals).toBe(2);
     expect(n.kpis.equipment).toBe(10);
     expect(n.kpis.hospitalsReporting).toBe(1);
@@ -92,7 +92,6 @@ describe('Dashboard ภาพรวมเครือข่าย', () => {
     expect(a.completeness['มีรายได้ตรง']).toBe(88); // DEMO-003 ไม่มีรายได้ตรง → 7/8
     expect(a.coverage.find((c: { fiscalYear: number }) => c.fiscalYear === 2568).pct).toBe(100);
     expect(a.coverage.find((c: { fiscalYear: number }) => c.fiscalYear === 2564).pct).toBe(0); // มีเครื่องซื้อ 2564 (DEMO-004) แต่ไม่มีข้อมูล
-    expect(a.followUps.map((f: { text: string }) => f.text).join(' ')).toMatch(/ยังไม่เปิดรอบประเมินปีงบ 2568/);
     expect(b.scoredCount).toBe(0);
     expect(b.notScored).toBe(2);
     expect(b.followUps.some((f: { text: string }) => /ยังไม่มีข้อมูลยืนยันปีงบ/.test(f.text))).toBe(true);
@@ -100,13 +99,13 @@ describe('Dashboard ภาพรวมเครือข่าย', () => {
     expect(b.followUps.filter((f: { text: string }) => /กรอกเพียง|รายได้ตรงเพียง/.test(f.text))).toEqual([]);
     expect(b.followUps.some((f: { text: string }) => /ยังไม่มีการบันทึกข้อมูลปีงบ 2568 เลย \(2 รายการ/.test(f.text))).toBe(true);
   });
-  it('ความคืบหน้ารอบประเมินแสดงในภาพรวม', async () => {
-    expect((await S.aAdmin!.post('/api/cycles', { fiscalYearBe: Y })).statusCode).toBe(201);
-    const n = (await S.ce!.get(`/api/dashboard/network?year=${Y}`)).json();
+  it('ความคืบหน้าข้อมูลปีนี้แสดงในภาพรวม (ไม่มีรอบประเมิน)', async () => {
+    const n = (await S.ca!.get(`/api/dashboard/network?year=${Y}`)).json();
     const a = n.hospitals.find((h: { hospital: { hcode: string } }) => h.hospital.hcode === 'DEMOA');
-    expect(a.cycle.status).toBe('open');
-    expect(a.progress.total).toBe(7); // DEMO-008 งดใช้ ไม่อยู่ในรอบ
+    expect(a.progress.total).toBe(7); // DEMO-008 งดใช้ ไม่ต้องกรอก
     expect(a.progress.approved).toBe(7);
-    expect(a.followUps.map((f: { text: string }) => f.text).join(' ')).not.toMatch(/ยังไม่เปิดรอบ/);
+    expect(a.followUps.map((f: { text: string }) => f.text).join(' ')).not.toMatch(/ยืนยันแล้ว d+ จาก/);
+    const b = n.hospitals.find((h: { hospital: { hcode: string } }) => h.hospital.hcode === 'DEMOB');
+    expect(b.progress).toEqual({ approved: 0, inProgress: 0, notStarted: 2, total: 2 });
   });
 });

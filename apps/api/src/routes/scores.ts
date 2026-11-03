@@ -5,7 +5,7 @@ import { fiscalYearOf } from '../annual.js';
 import { requirePerm } from '../auth.js';
 import { withTx } from '../db.js';
 import { HttpError } from '../errors.js';
-import { annualSeries, currentFormulaSet, EQ_SELECT, scoreAll, scoreFromRecords, WINDOW_YEARS, type EquipmentLite } from '../scoring.js';
+import { annualSeries, currentFormulaSet, EQ_SELECT, scoreAll, scoreFromRecords, WINDOW_YEARS, type EquipmentLite, type ScoreOutcome } from '../scoring.js';
 import type { AppDeps } from '../app.js';
 
 const Year = z.coerce.number().int().min(2500).max(2700);
@@ -15,6 +15,7 @@ interface ScoreRow {
   equipment: Record<string, unknown>; status: string; dataYears: number[]; rank: number | null;
   utilityScore?: number; scores?: unknown; paybackYears?: number | null; costPerCase?: number | null;
   recommendation?: string; recommendationText?: string; warning?: boolean; utilizationPct?: number; problems?: string[];
+  source?: 'annual' | 'excel';
 }
 
 export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
@@ -37,7 +38,7 @@ export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
           ? {
               utilityScore: o.breakdown.utilityScore, scores: o.breakdown.scores, paybackYears: o.breakdown.paybackYears,
               costPerCase: o.breakdown.costPerCase, recommendation: o.breakdown.recommendation, recommendationText: o.breakdown.recommendationText,
-              warning: o.breakdown.warning, utilizationPct: o.inputs.utilizationPct,
+              warning: o.breakdown.warning, utilizationPct: o.inputs.utilizationPct, source: o.source,
             }
           : { problems: o.problems }),
       }));
@@ -70,10 +71,12 @@ export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
       if (!e) throw new HttpError(404, 'ไม่พบครุภัณฑ์');
       const f = await currentFormulaSet(db);
       const recs = (await db.query('SELECT * FROM annual_record WHERE equipment_id = $1 ORDER BY fiscal_year_be', [id])).rows;
-      const outcome = e.purchase_year_be > year
-        ? { status: 'no_data' as const, problems: [`ซื้อหลังปีงบ ${year}`], years: [] }
-        : scoreFromRecords(e, recs, year, f.fs);
-      const ranked = outcome.status === 'scored' ? (await scoreAll(db, year, f.fs, { hospitalId: e.hospital_id })).filter((r) => r.rank !== null) : [];
+      // ใช้ scoreAll เพื่อให้ได้ผลเดียวกับหน้าผลวิเคราะห์ (รวมคะแนนจากไฟล์ Excel ที่นำเข้า) และอันดับในโรงพยาบาล
+      const all = e.purchase_year_be > year ? [] : await scoreAll(db, year, f.fs, { hospitalId: e.hospital_id });
+      const outcome: ScoreOutcome = e.purchase_year_be > year
+        ? { status: 'no_data', problems: [`ซื้อหลังปีงบ ${year}`], years: [] }
+        : (all.find((r) => r.equipment.id === id)?.outcome ?? scoreFromRecords(e, recs, year, f.fs));
+      const ranked = outcome.status === 'scored' ? all.filter((r) => r.rank !== null) : [];
       const history = (
         await db.query(
           `SELECT s.analysis_year, s.utility_score, s.recommendation, s.warning, s.rank, s.computed_at, fs.version AS formula_version

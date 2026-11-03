@@ -8,6 +8,10 @@ export const ROLES = ['central_admin', 'central_executive', 'hospital_admin', 'd
 export type Role = (typeof ROLES)[number];
 export const CENTRAL_ROLES: Role[] = ['central_admin', 'central_executive'];
 export const HOSPITAL_ROLES: Role[] = ['hospital_admin', 'data_entry', 'reviewer', 'executive'];
+/** แต่ละโรงพยาบาลมีผู้ใช้ 1 คน คือเจ้าหน้าที่บันทึกข้อมูล (บทบาทอื่นของโรงพยาบาลเลิกใช้ เก็บไว้เพื่อข้อมูลเดิม) */
+export const ASSIGNABLE_HOSPITAL_ROLES: Role[] = ['data_entry'];
+/** ส่วนกลางมีบทบาทเดียว: ผู้ดูแลระบบส่วนกลาง (รวมสิทธิ์ของผู้บริหารส่วนกลางเดิมไว้แล้ว) */
+export const ASSIGNABLE_CENTRAL_ROLES: Role[] = ['central_admin'];
 
 export const ROLE_LABEL: Record<Role, string> = {
   central_admin: 'ผู้ดูแลระบบส่วนกลาง',
@@ -23,17 +27,19 @@ export const PERMISSIONS = {
   'dashboard.view': ROLES,
   'report.export': ROLES,
   'equipment.read': ROLES,
-  'equipment.write': ['hospital_admin', 'data_entry'],
-  'equipment.code.change': ['hospital_admin'],
-  'annual.write': ['hospital_admin', 'data_entry'],
-  'annual.review': ['hospital_admin', 'reviewer'],
-  'annual.unlock': ['hospital_admin'],
-  'cycle.manage': ['hospital_admin'],
-  'users.manage': ['central_admin', 'hospital_admin'],
+  'equipment.write': ['data_entry'],
+  'equipment.code.change': ['data_entry'],
+  // เจ้าหน้าที่ยืนยันข้อมูลเองเมื่อส่ง (ยืนยันตัวตนด้วย Provider ID) และปลดล็อกเพื่อแก้ไขได้โดยระบุเหตุผล
+  'annual.write': ['data_entry'],
+  'annual.unlock': ['data_entry'],
+  'users.manage': ['central_admin'],
   'hospital.manage': ['central_admin'],
-  'department.manage': ['central_admin', 'hospital_admin'],
+  'department.manage': ['central_admin', 'data_entry'],
   'formula.manage': ['central_admin'],
-  'audit.view': ['central_admin', 'central_executive', 'hospital_admin', 'reviewer', 'executive'],
+  // นำเข้าข้อมูล Utility Analysis จากไฟล์ Excel / เปิดใช้ชุดน้ำหนักสำหรับข้อมูลที่นำเข้า
+  'utility.import': ['data_entry', 'central_admin'],
+  'utility.settings': ['central_admin'],
+  'audit.view': ['central_admin', 'data_entry'],
 } as const satisfies Record<string, readonly Role[]>;
 export type Permission = keyof typeof PERMISSIONS;
 

@@ -128,7 +128,7 @@ export function EquipmentForm() {
         <div className="card stack">
           <h3 className="sec-t"><span className="n">1</span>ข้อมูลพื้นฐาน</h3>
           <div className="grid-f">
-            <Field k="code" label="รหัสครุภัณฑ์ (Code EQU/EQM)" req hint={codeLocked ? 'แก้ไขได้เฉพาะผู้ดูแลระบบโรงพยาบาล' : 'ไม่ซ้ำภายในโรงพยาบาล'} error={errors.code}>
+            <Field k="code" label="รหัสครุภัณฑ์ (Code EQU/EQM)" req hint="ไม่ซ้ำภายในโรงพยาบาล" error={errors.code}>
               <input id="code" className={`in ${errors.code ? 'err' : ''}`} value={form.code} onChange={set('code')} readOnly={codeLocked} />
             </Field>
             <Field k="name" label="ชื่อครุภัณฑ์ (ตามทะเบียนพัสดุ)" req cls="span2" error={errors.name}>{txt('name')}</Field>
