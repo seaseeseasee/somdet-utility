@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type Option, type ScoreDetail, type ScoreList, type ScoreRow } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { baht, CURRENT_BE_YEAR } from '../lib/format';
-import { ADVICE_DISCLAIMER, f1, f2, FACTORS, RecChip, ScoreBadge, UtilChip, ValueChip } from '../lib/score';
+import { baht, latestFiscalYear } from '../lib/format';
+import { useOptions } from '../lib/useApi';
+import { ADVICE_DISCLAIMER, f1, f2, FACTORS, RecChip, ScoreBadge, UtilChip, ValueChip, weightPct } from '../lib/score';
 
 const LEVELS: [string, string][] = [['', 'ทุกระดับ'], ['high', '80–100 ซื้อเพิ่ม/อัปเกรด'], ['good', '60–79 คงสภาพ'], ['medium', '40–59 ทบทวนแผน'], ['low', '< 40 พิจารณาทดแทน']];
 
@@ -38,9 +39,9 @@ export function Breakdown({ equipmentId, year }: { equipmentId: string; year: nu
           <div className="muted" style={{ fontSize: 12 }}>เกณฑ์เสริม: คะแนนรวม ≥ 80 / 65–79 / 50–64 / &lt; 50 · รายมิติต่ำ &lt; 50, เฝ้าระวัง 50–59 · ไม่แสดงในรายงานผู้บริหาร</div>
         </div>
       )}
-      {FACTORS.map(([k, label, w]) => (
+      {FACTORS.map(([k, label]) => (
         <div className="calc-line" key={k}>
-          <span>{label} Score <span className="muted">× {w}</span></span>
+          <span>{label} Score <span className="muted">× {d.weights[k]}</span></span>
           <b className="num">{f2(b.scores[k])} → {f2(b.weighted[k])}</b>
         </div>
       ))}
@@ -62,16 +63,15 @@ export function Breakdown({ equipmentId, year }: { equipmentId: string; year: nu
 export function Scores() {
   const { me } = useAuth();
   const central = me?.scope === 'all';
-  const latest = CURRENT_BE_YEAR - (new Date().getMonth() >= 9 ? 0 : 1); // ปีงบล่าสุดที่สิ้นสุดแล้ว
+  const latest = latestFiscalYear();
   const [year, setYear] = useState(latest);
   const [dept, setDept] = useState('');
   const [hospital, setHospital] = useState('');
   const [level, setLevel] = useState('');
-  const [opts, setOpts] = useState<Option[]>([]);
+  const opts = useOptions(central ? '/api/hospitals' : '/api/departments');
   const [data, setData] = useState<ScoreList | null>(null);
   const [sel, setSel] = useState<string | null>(null);
 
-  useEffect(() => { api.get<Option[]>(central ? '/api/hospitals' : '/api/departments').then(setOpts); }, [central]);
   useEffect(() => {
     const p = new URLSearchParams({ year: String(year) });
     if (dept) p.set('departmentId', dept);
@@ -123,7 +123,7 @@ export function Scores() {
             <table className="tbl compact">
               <thead><tr>
                 <th className="c">อันดับ</th><th>ครุภัณฑ์</th>
-                {FACTORS.map(([k, l, w]) => <th key={k} className="r">{l}<br /><span className="muted">{w * 100}%</span></th>)}
+                {FACTORS.map(([k, l]) => <th key={k} className="r">{l}<br /><span className="muted">{weightPct(data?.weights[k])}</span></th>)}
                 <th className="r">Payback<br />(ปี)</th><th className="c">Utility<br />Score</th><th>ระดับการใช้งาน</th><th>ความคุ้มค่า<br /><span className="muted">(เกณฑ์เสริม)</span></th>
               </tr></thead>
               <tbody>

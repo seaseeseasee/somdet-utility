@@ -9,6 +9,12 @@ export const thDate = (s: string | null | undefined, withTime = false) => {
 };
 
 export const CURRENT_BE_YEAR = new Date().getFullYear() + 543;
+/** ปีงบประมาณล่าสุดที่สิ้นสุดแล้ว (ปีงบสิ้นสุด 30 ก.ย.) */
+export const latestFiscalYear = () => CURRENT_BE_YEAR - (new Date().getMonth() >= 9 ? 0 : 1);
+/** ล้านบาท ทศนิยมไม่เกิน 1 ตำแหน่ง */
+export const mb = (v: number) => (v / 1e6).toLocaleString('th-TH', { maximumFractionDigits: 1 });
+/** ตัวเลขทั่วไป ทศนิยมไม่เกิน d ตำแหน่ง (ว่าง = —) */
+export const num = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: d }));
 export const ageYears = (purchaseYearBe: number) => Math.max(CURRENT_BE_YEAR - purchaseYearBe, 1);
 
 export const STATUS: Record<string, { label: string; tone: 'g' | 'b' | 'w' | 'r' | 'n' }> = {

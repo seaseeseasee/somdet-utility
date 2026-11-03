@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { computeScore, formulaSetFromDefinition, IncompleteDataError } from '@mu/formula';
-import { currentFormulaSet, importYearOf } from '../scoring.js';
+import { computeScore, currentYearOf, formulaSetFromDefinition, IncompleteDataError } from '@mu/formula';
+import { currentFormulaSet } from '../scoring.js';
 import { z } from 'zod';
 import { requirePerm, requireUser } from '../auth.js';
 import { verifyAudit, writeAudit } from '../audit.js';
@@ -31,7 +31,7 @@ export async function formulaRoutes(app: FastifyInstance, { pool }: AppDeps) {
         )
       ).rows;
       return {
-        current: { version: f.version, weights: f.fs.weights, paybackPenalty: f.fs.paybackPenalty, currentYearBe: f.fs.currentYearBe ?? null, currentYearBeUsed: importYearOf(f.fs) },
+        current: { version: f.version, weights: f.fs.weights, paybackPenalty: f.fs.paybackPenalty, currentYearBe: f.fs.currentYearBe ?? null, currentYearBeUsed: currentYearOf(f.fs) },
         history,
       };
     });

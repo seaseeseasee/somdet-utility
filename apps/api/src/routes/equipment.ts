@@ -1,14 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { DateStr, Uuid, YearBe } from '../validation.js';
 import { can, requirePerm } from '../auth.js';
 import { writeAudit } from '../audit.js';
 import { withTx, type Db } from '../db.js';
 import { HttpError } from '../errors.js';
 import type { AppDeps } from '../app.js';
 
-const Uuid = z.string().uuid();
-const Year = z.coerce.number().int().min(2500, 'ปี พ.ศ. ต้องอยู่ระหว่าง 2500–2700').max(2700, 'ปี พ.ศ. ต้องอยู่ระหว่าง 2500–2700');
-const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ YYYY-MM-DD (ค.ศ.)');
 export const EQUIPMENT_STATUS = ['ready', 'in_use', 'repair', 'suspended', 'pending_disposal', 'disposed'] as const;
 
 export const EquipmentBody = z
@@ -20,8 +18,8 @@ export const EquipmentBody = z
     brand: z.string().trim().min(1, 'กรุณากรอกยี่ห้อ').max(100),
     model: z.string().trim().min(1, 'กรุณากรอกรุ่น').max(100),
     serialNo: z.string().trim().min(1, 'กรุณากรอก Serial Number').max(100),
-    purchaseYearBe: Year,
-    budgetYearBe: Year.nullable().optional(),
+    purchaseYearBe: YearBe,
+    budgetYearBe: YearBe.nullable().optional(),
     purchasePrice: z.coerce.number().positive('ราคาจัดซื้อต้องมากกว่า 0').max(1e12),
     contractNo: z.string().trim().max(100).nullable().optional(),
     fundingSource: z.string().trim().max(100).nullable().optional(),
@@ -86,12 +84,16 @@ export async function equipmentRoutes(app: FastifyInstance, { pool }: AppDeps) {
         AND ($6::numeric IS NULL OR e.purchase_price >= $6) AND (NOT $7::boolean OR e.details_pending)`;
       const args = [q.q || null, q.status ?? null, q.departmentId ?? null, q.typeId ?? null, q.hospitalId ?? null, q.minPrice ?? null, q.pending === '1'];
       const total = (await db.query(`SELECT count(*)::int AS n ${FROM} ${where}`, args)).rows[0].n as number;
+      // จำนวนตามสถานะของทุกรายการที่ตรงเงื่อนไข (ไม่ใช่เฉพาะหน้าที่แสดง) สำหรับการ์ด KPI
+      const statusCounts = Object.fromEntries(
+        (await db.query(`SELECT e.status, count(*)::int AS n ${FROM} ${where} GROUP BY e.status`, args)).rows.map((r) => [r.status, r.n]),
+      ) as Record<string, number>;
       const rows = (
         await db.query(`SELECT ${COLS} ${FROM} ${where} ORDER BY h.name, e.code LIMIT $8 OFFSET $9`, [
           ...args, q.pageSize, (q.page - 1) * q.pageSize,
         ])
       ).rows;
-      return { total, page: q.page, pageSize: q.pageSize, rows };
+      return { total, page: q.page, pageSize: q.pageSize, statusCounts, rows };
     });
   });
 

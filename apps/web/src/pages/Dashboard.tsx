@@ -1,16 +1,15 @@
 import type { ChartConfiguration } from 'chart.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { api, type HospitalDashboard, type Option } from '../lib/api';
+import { api, type HospitalDashboard } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { BAND_COLOR, ChartView, COLORS, grid, millions, SERIES } from '../lib/chart';
-import { baht, CURRENT_BE_YEAR } from '../lib/format';
+import { baht, latestFiscalYear as latestYear, mb } from '../lib/format';
+import { useOptions } from '../lib/useApi';
 import { f1, FACTORS, RecChip, ScoreBadge, UtilChip } from '../lib/score';
 
 const PRICE: [string, string, string?][] = [['', 'ทุกช่วงราคา'], ['1000000', '≥ 1 ล้านบาท'], ['1000000-5000000', '1–5 ล้านบาท'], ['5000000-20000000', '5–20 ล้านบาท'], ['20000000', '> 20 ล้านบาท']];
 const LEVEL: [string, string][] = [['', 'ทุกระดับ'], ['high', '80–100'], ['good', '60–79'], ['medium', '40–59'], ['low', '< 40'], ['none', 'ยังไม่มีคะแนน']];
-const latestYear = () => CURRENT_BE_YEAR - (new Date().getMonth() >= 9 ? 0 : 1);
-const mb = (v: number) => (v / 1e6).toLocaleString('th-TH', { maximumFractionDigits: 1 });
 
 export function Dashboard() {
   const { me } = useAuth();
@@ -23,17 +22,12 @@ export function Dashboard() {
   const [q, setQ] = useState('');
   const [price, setPrice] = useState('');
   const [level, setLevel] = useState('');
-  const [hospitals, setHospitals] = useState<Option[]>([]);
-  const [depts, setDepts] = useState<Option[]>([]);
-  const [types, setTypes] = useState<Option[]>([]);
+  const types = useOptions('/api/equipment-types');
+  const hospitals = useOptions(central ? '/api/hospitals' : null);
+  const depts = useOptions(central ? null : '/api/departments');
   const [d, setD] = useState<HospitalDashboard | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
 
-  useEffect(() => {
-    api.get<Option[]>('/api/equipment-types').then(setTypes);
-    if (central) api.get<Option[]>('/api/hospitals').then(setHospitals);
-    else api.get<Option[]>('/api/departments').then(setDepts);
-  }, [central]);
   useEffect(() => {
     const p = new URLSearchParams({ year: String(year) });
     if (hospital) p.set('hospitalId', hospital);

@@ -2,7 +2,8 @@ import { useEffect, useState, type DragEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ApiError, type Option } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { thDate } from '../lib/format';
+import { num, thDate } from '../lib/format';
+import { useOptions } from '../lib/useApi';
 import { f2, ScoreBadge } from '../lib/score';
 import { ImportHistory } from './ImportHistory';
 
@@ -21,12 +22,11 @@ interface Preview {
 }
 
 const STATUS: Record<Status, [string, string]> = { ok: ['พร้อม', 'g'], warning: ['มีข้อสังเกต', 'w'], incomplete: ['ข้อมูลไม่ครบ', 'n'], error: ['ผิดพลาด', 'r'] };
-const num = (v: number | null | undefined, d = 0) => (v === null || v === undefined ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: d }));
 
 export function UtilityImport() {
   const { me } = useAuth();
   const central = me?.scope === 'all';
-  const [hospitals, setHospitals] = useState<Option[]>([]);
+  const hospitals = useOptions(central ? '/api/hospitals' : null);
   const [hospitalId, setHospitalId] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
@@ -37,7 +37,6 @@ export function UtilityImport() {
   const [msg, setMsg] = useState<{ tone: string; text: string } | null>(null);
   const [done, setDone] = useState<{ inserted: number; replaced: number; skipped: number; registered: number; reused: number; removed: number } | null>(null);
 
-  useEffect(() => { if (central) api.get<Option[]>('/api/hospitals').then(setHospitals); }, [central]);
 
   const send = async (file: File) => {
     setMsg(null);
@@ -169,7 +168,7 @@ export function UtilityImport() {
                       <td style={{ minWidth: 260 }}>
                         <span className={`chip ${STATUS[r.status][1]}`}>{STATUS[r.status][0]}</span>
                         {r.register && <span className="chip b" style={{ marginLeft: 4 }}>สร้างในทะเบียน</span>}
-                        {r.missing.length > 0 && <div className="hint">ขาด: {r.missing.join(', ')}</div>}
+                        {r.missing.length > 0 && <div className="hint">เหตุผล: {r.missing.join(', ')}</div>}
                         {[...r.errors, ...r.warnings].map((m) => <div key={m} className={`hint ${r.errors.includes(m) ? 'e' : ''}`}>{m}</div>)}
                       </td>
                     </tr>

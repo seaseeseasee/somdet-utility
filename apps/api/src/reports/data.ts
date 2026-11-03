@@ -1,4 +1,4 @@
-import { RECOMMENDATION_TEXT, type ScoreBreakdown, type UtilizationAdvice } from '@mu/formula';
+import { RECOMMENDATION_TEXT, type FormulaSet, type ScoreBreakdown, type UtilizationAdvice } from '@mu/formula';
 import { z } from 'zod';
 import { fiscalYearOf, rowToBody } from '../annual.js';
 import type { CurrentUser } from '../auth.js';
@@ -41,6 +41,8 @@ export interface ReportRow {
 export interface ReportData {
   title: string; subtitle: string; scopeLabel: string; year: number; window: { from: number; to: number };
   formulaVersion: string; formulaDefinition: Record<string, unknown>; generatedAt: Date; generatedBy: string;
+  /** น้ำหนัก 6 ปัจจัยของชุดสูตรที่ใช้ */
+  weights: FormulaSet['weights'];
   sections: Section[]; sort: ReportQuery['sort']; signatures: {
     preparedBy?: string; reviewedBy?: string; approvedBy?: string;
     preparedAt?: string; reviewedAt?: string; approvedAt?: string;
@@ -108,6 +110,7 @@ export async function buildReportData(db: Db, u: CurrentUser, q: ReportQuery): P
     window: { from: year - WINDOW_YEARS + 1, to: year },
     formulaVersion: f.version,
     formulaDefinition: def,
+    weights: f.fs.weights,
     generatedAt: new Date(),
     generatedBy: u.name,
     sections: q.sections,

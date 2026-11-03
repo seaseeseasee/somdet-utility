@@ -157,6 +157,25 @@ describe('Preview การนำเข้า', () => {
   });
 });
 
+describe('แถวที่ช่องครบแต่สูตรคำนวณไม่ได้', () => {
+  it('ราคา 0 หรือคะแนนทศนิยมเกิน 1 ตำแหน่ง → "ข้อมูลไม่ครบ" พร้อมเหตุผลจากสูตร (ไม่ขึ้นสถานะพร้อมโดยไม่มีคะแนน)', async () => {
+    const wb = new ExcelJS.Workbook();
+    dataSheet(wb, 'ข้อมูลครุภัณฑ์ 67-69', 'ทดสอบ', [
+      full('คะแนนทศนิยมสองตำแหน่ง', 2565, 1000000, 10, 10, 0, 0, 0, 4.75, 4, 4),
+      full('ราคาศูนย์', 2565, 0, 10, 10, 0, 0, 0, 4, 4, 4),
+      full('ปกติ', 2565, 1000000, 10, 10, 0, 0, 0, 4, 4, 4),
+    ]);
+    const p = (await upload('aEntry', Buffer.from(await wb.xlsx.writeBuffer()))).json();
+    const s = sheetOf(p, 'ข้อมูลครุภัณฑ์ 67-69');
+    expect(rowOf(s, 'คะแนนทศนิยมสองตำแหน่ง')).toMatchObject({ status: 'incomplete', utilityScore: null });
+    expect(rowOf(s, 'คะแนนทศนิยมสองตำแหน่ง').missing.join()).toMatch(/ทศนิยมได้ไม่เกิน 1 ตำแหน่ง/);
+    expect(rowOf(s, 'ราคาศูนย์')).toMatchObject({ status: 'incomplete', utilityScore: null });
+    expect(rowOf(s, 'ราคาศูนย์').missing.join()).toMatch(/ราคาซื้อ/);
+    expect(rowOf(s, 'ปกติ').status).not.toBe('incomplete');
+    expect(s.summary.incomplete).toBe(2);
+  });
+});
+
 describe('ความปลอดภัยของไฟล์และสิทธิ์', () => {
   it('รับเฉพาะ .xlsx', async () => {
     const buf = await workbook();
@@ -319,5 +338,17 @@ describe('ยืนยันนำเข้าและแสดงผล', () =
     expect(b.length).toBe(3);
     expect(b[0].mode).toBe('replace');
     expect(b.at(-1).registered_count).toBe(10);
+  });
+  it('นำเข้าหลายร้อยแถว (เขียนเป็นชุด 500 แถว) ครบทุกแถว ลำดับตามไฟล์', async () => {
+    const wb = new ExcelJS.Workbook();
+    // ไม่มีราคาซื้อ → ไม่สร้างในทะเบียน (ทดสอบเฉพาะการเขียนข้อมูลนำเข้า)
+    dataSheet(wb, 'ชุดใหญ่', 'ทดสอบจำนวนมาก', Array.from({ length: 1201 }, (_, n) => ({ b: `เครื่องที่ ${n + 1}`, c: 2565 })));
+    const p = (await upload('aEntry', Buffer.from(await wb.xlsx.writeBuffer()), 'big.xlsx')).json();
+    const r = (await as('aEntry').post('/api/utility/import/commit', { previewToken: p.previewToken, selectedSheets: ['ชุดใหญ่'], mode: 'append' })).json();
+    expect(r).toMatchObject({ inserted: 1201, registered: 0 });
+    const rows = (await records('aEntry', '?dataset=ชุดใหญ่')).rows as unknown as { name: string; dataStatus: string; seqNo: number }[];
+    expect(rows).toHaveLength(1201);
+    expect(rows.map((x) => x.seqNo)).toEqual(Array.from({ length: 1201 }, (_, n) => n + 1));
+    expect(rows.at(-1)).toMatchObject({ name: 'เครื่องที่ 1201', dataStatus: 'incomplete' });
   });
 });

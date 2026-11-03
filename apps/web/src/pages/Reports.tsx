@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Option } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { CURRENT_BE_YEAR, thDate } from '../lib/format';
+import { latestFiscalYear as latestYear, thDate } from '../lib/format';
+import { useOptions } from '../lib/useApi';
 
-const latestYear = () => CURRENT_BE_YEAR - (new Date().getMonth() >= 9 ? 0 : 1);
 const SORT: [string, string][] = [['score_desc', 'Utility Score (มาก → น้อย)'], ['score_asc', 'Utility Score (น้อย → มาก)'], ['code', 'รหัสครุภัณฑ์'], ['department', 'หน่วยงาน']];
 interface Recent { at: string; actor_name: string | null; after: { format: string; year: number; scope: string; file: string; rows: number } }
 
@@ -17,7 +17,7 @@ export function Reports() {
   const [dept, setDept] = useState('');
   const [sort, setSort] = useState('score_desc');
   const [sig, setSig] = useState({ preparedBy: '', reviewedBy: '', approvedBy: '', preparedAt: '', reviewedAt: '', approvedAt: '' });
-  const [opts, setOpts] = useState<Option[]>([]);
+  const opts = useOptions(central ? '/api/hospitals' : '/api/departments');
   const [html, setHtml] = useState<string | null>(null);
   const [recent, setRecent] = useState<Recent[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -25,7 +25,6 @@ export function Reports() {
   const loadRecent = () => api.get<Recent[]>('/api/reports/recent').then(setRecent, () => undefined);
   useEffect(() => {
     api.get<{ sections: { key: string; label: string }[] }>('/api/reports/options').then((r) => setSections(r.sections));
-    api.get<Option[]>(central ? '/api/hospitals' : '/api/departments').then(setOpts);
     void loadRecent();
   }, [central]);
 

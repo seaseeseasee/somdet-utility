@@ -2,10 +2,12 @@ import type { FactorScores, UtilAdvice, ValueAssessment } from './api';
 
 export const BAND: Record<string, string> = { high: 'g', good: 'b', medium: 'w', low: 'r' };
 export const bandOf = (v: number) => (v >= 80 ? 'high' : v >= 60 ? 'good' : v >= 40 ? 'medium' : 'low');
-export const FACTORS: [keyof FactorScores, string, number][] = [
-  ['utilization', 'Utilization', 0.25], ['clinical', 'Clinical', 0.2], ['financial', 'Financial', 0.2],
-  ['reliability', 'Reliability', 0.15], ['satisfaction', 'Satisfaction', 0.1], ['strategic', 'Strategic', 0.1],
+/** 6 ปัจจัย (น้ำหนักมาจากชุดสูตรที่ใช้อยู่ ผ่าน API) */
+export const FACTORS: [keyof FactorScores, string][] = [
+  ['utilization', 'Utilization'], ['clinical', 'Clinical'], ['financial', 'Financial'],
+  ['reliability', 'Reliability'], ['satisfaction', 'Satisfaction'], ['strategic', 'Strategic'],
 ];
+export const weightPct = (w: number | undefined) => (w === undefined ? '' : `${Number((w * 100).toFixed(4))}%`);
 export const f1 = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
 export const f2 = (v: number | null | undefined) => (v === null || v === undefined ? 'N/A' : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
@@ -32,6 +34,11 @@ export function ValueChip({ a }: { a: ValueAssessment | null | undefined }) {
     </span>
   );
 }
+
+/** ข้อความข้อเสนอแนะ 4 ระดับ (ตรงกับ RECOMMENDATION_TEXT ของชุดสูตร) */
+export const REC_TEXT: Record<string, string> = {
+  high: 'ซื้อเพิ่ม/อัปเกรดรุ่นใหม่', good: 'คงสภาพ ติดตามต่อเนื่อง', medium: 'ทบทวนแผนการใช้งาน/เพิ่ม Utilization', low: 'พิจารณาทดแทนหรือไม่จัดซื้อเพิ่ม',
+};
 
 export function RecChip({ level, text }: { level?: string; text?: string }) {
   return level ? <span className={`chip ${BAND[level]}`}>{text}</span> : null;

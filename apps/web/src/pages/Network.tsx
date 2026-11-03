@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type NetworkDashboard } from '../lib/api';
-import { CURRENT_BE_YEAR } from '../lib/format';
+import { latestFiscalYear as latestYear, mb } from '../lib/format';
 import { f1, ScoreBadge } from '../lib/score';
 
-const latestYear = () => CURRENT_BE_YEAR - (new Date().getMonth() >= 9 ? 0 : 1);
-const mb = (v: number) => (v / 1e6).toLocaleString('th-TH', { maximumFractionDigits: 1 });
 const short = (n: string) => n.replace('โรงพยาบาล', 'รพ.');
 
 /** สีช่องตาราง: ยิ่งเข้มยิ่งมีข้อมูลมาก (สีน้ำเงินไล่ระดับ) */

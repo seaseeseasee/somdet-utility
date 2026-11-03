@@ -148,6 +148,16 @@ describe('ทะเบียนครุภัณฑ์', () => {
     expect((await S.aEntry!.get('/api/equipment?status=repair')).json().total).toBe(1);
     expect((await S.aEntry!.get('/api/equipment?minPrice=10000000')).json().total).toBe(2);
   });
+  it('แบ่งหน้า และจำนวนตามสถานะนับจากทุกรายการ ไม่ใช่เฉพาะหน้าที่แสดง', async () => {
+    const all = (await S.aEntry!.get('/api/equipment?pageSize=200')).json();
+    const p2 = (await S.aEntry!.get('/api/equipment?pageSize=3&page=2')).json();
+    expect(p2.rows).toHaveLength(3);
+    expect(p2.total).toBe(all.total);
+    expect(p2.rows.map((r: { id: string }) => r.id)).toEqual(all.rows.slice(3, 6).map((r: { id: string }) => r.id));
+    expect(p2.statusCounts).toEqual(all.statusCounts);
+    expect(Object.values(p2.statusCounts as Record<string, number>).reduce((a, b) => a + b, 0)).toBe(all.total);
+    expect(p2.statusCounts.repair).toBe(1);
+  });
 });
 
 describe('Audit Log', () => {

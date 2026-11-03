@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { useApi } from '../lib/useApi';
 import { useAuth } from '../lib/auth';
 import { thDate } from '../lib/format';
 
@@ -11,8 +10,9 @@ interface Batch {
 export function ImportHistory({ refreshKey }: { refreshKey?: unknown }) {
   const { me } = useAuth();
   const central = me?.scope === 'all';
-  const [batches, setBatches] = useState<Batch[]>([]);
-  useEffect(() => { api.get<Batch[]>('/api/utility/batches').then(setBatches, () => undefined); }, [refreshKey]);
+  const { data, error } = useApi<Batch[]>('/api/utility/batches', refreshKey);
+  if (error) return <div className="note red">โหลดประวัติการนำเข้าไม่ได้: {error}</div>;
+  const batches = data ?? [];
   if (!batches.length) return null;
   return (
     <div className="card stack">

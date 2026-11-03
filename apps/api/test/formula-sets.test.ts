@@ -29,7 +29,7 @@ describe('สมมติฐานและน้ำหนักคะแนน 
     expect((await as('aEntry').post('/api/formula-sets', body())).statusCode).toBe(403);
     const bad = await as('ca').post('/api/formula-sets', body({ weights: { ...body().weights, utilization: 0.5 } }));
     expect(bad.statusCode).toBe(400);
-    expect(bad.json().error).toMatch(/ผลรวมน้ำหนักต้องเท่ากับ 1\.00 \(100%\)/);
+    expect(bad.json().error).toMatch(/ผลรวมน้ำหนัก 6 ด้านต้องเท่ากับ 1\.00 \(100%\)/);
     expect((await as('ca').post('/api/formula-sets', body({ paybackPenalty: -1 }))).statusCode).toBe(400);
     expect((await as('ca').post('/api/formula-sets', body({ currentYearBe: 3000 }))).statusCode).toBe(400);
   });

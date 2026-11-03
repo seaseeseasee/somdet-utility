@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, type Equipment, type ScoreDetail, type YearList } from '../lib/api';
-import { f1, f2, RecChip, ScoreBadge } from '../lib/score';
+import { f1, f2, REC_TEXT, RecChip, ScoreBadge } from '../lib/score';
+import { useApi } from '../lib/useApi';
 import { Breakdown } from './Scores';
 import { TrendCharts } from './TrendCharts';
 import { useAuth } from '../lib/auth';
@@ -26,18 +27,11 @@ function changes(h: HistoryRow) {
 export function EquipmentDetail() {
   const { id } = useParams();
   const { can } = useAuth();
-  const [e, setE] = useState<Equipment | null>(null);
-  const [hist, setHist] = useState<HistoryRow[]>([]);
-  const [err, setErr] = useState<string | null>(null);
-  const [years, setYears] = useState<YearList | null>(null);
-  const [score, setScore] = useState<ScoreDetail | null>(null);
-
-  useEffect(() => {
-    api.get<Equipment>(`/api/equipment/${id}`).then(setE, (x: Error) => setErr(x.message));
-    api.get<HistoryRow[]>(`/api/equipment/${id}/history`).then(setHist, () => undefined);
-    api.get<YearList>(`/api/equipment/${id}/annual`).then(setYears, () => undefined);
-    api.get<ScoreDetail>(`/api/equipment/${id}/score`).then(setScore, () => undefined);
-  }, [id]);
+  const { data: e, error: err } = useApi<Equipment>(`/api/equipment/${id}`);
+  // ประวัติการแก้ไขดูได้เฉพาะผู้มีสิทธิ์ (ไม่มีสิทธิ์ = แสดงว่าไม่มีประวัติ)
+  const hist = useApi<HistoryRow[]>(`/api/equipment/${id}/history`).data ?? [];
+  const { data: years, error: yearsErr } = useApi<YearList>(`/api/equipment/${id}/annual`);
+  const { data: score, error: scoreErr } = useApi<ScoreDetail>(`/api/equipment/${id}/score`);
 
   if (err) return <div className="note red">{err}</div>;
   if (!e) return <div className="empty">กำลังโหลด…</div>;
@@ -51,6 +45,7 @@ export function EquipmentDetail() {
   ];
   return (
     <>
+      {(yearsErr || scoreErr) && <div className="note red">โหลดข้อมูลรายปีหรือคะแนนไม่ได้: {yearsErr ?? scoreErr}</div>}
       <div className="card hrow between">
         <div className="hrow" style={{ gap: 14 }}>
           <div>
@@ -126,7 +121,7 @@ export function EquipmentDetail() {
               <table className="tbl"><thead><tr><th>ปีงบ</th><th className="c">Score</th><th>ข้อเสนอแนะ</th><th className="c">อันดับ</th><th>ชุดสูตร</th></tr></thead>
                 <tbody>{score.history.map((h) => (
                   <tr key={h.computed_at}><td className="num">{h.analysis_year}</td><td className="c"><ScoreBadge v={h.utility_score} /></td>
-                    <td><RecChip level={h.recommendation} text={({ high: 'ซื้อเพิ่ม/อัปเกรดรุ่นใหม่', good: 'คงสภาพ ติดตามต่อเนื่อง', medium: 'ทบทวนแผนการใช้งาน', low: 'พิจารณาทดแทน' } as Record<string, string>)[h.recommendation]} /></td>
+                    <td><RecChip level={h.recommendation} text={REC_TEXT[h.recommendation]} /></td>
                     <td className="c num">{h.rank ?? '—'}</td><td>v{h.formula_version}</td></tr>
                 ))}</tbody></table>
             </div>

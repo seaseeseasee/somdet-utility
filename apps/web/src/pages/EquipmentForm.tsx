@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, type Equipment, type Option } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { CURRENT_BE_YEAR, STATUS, thDate } from '../lib/format';
+import { useOptions } from '../lib/useApi';
 
 type Form = Record<string, string>;
 const EMPTY: Form = {
@@ -58,8 +59,8 @@ export function EquipmentForm() {
   const { can } = useAuth();
   const [form, setForm] = useState<Form>(EMPTY);
   const [version, setVersion] = useState<number | null>(null);
-  const [types, setTypes] = useState<Option[]>([]);
-  const [depts, setDepts] = useState<Option[]>([]);
+  const types = useOptions('/api/equipment-types');
+  const depts = useOptions('/api/departments');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -67,8 +68,6 @@ export function EquipmentForm() {
   const [loadedAt, setLoadedAt] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get<Option[]>('/api/equipment-types').then(setTypes);
-    api.get<Option[]>('/api/departments').then(setDepts);
     if (id)
       api.get<Equipment>(`/api/equipment/${id}`).then((e) => {
         setForm({

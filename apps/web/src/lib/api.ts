@@ -53,7 +53,7 @@ export interface Equipment {
   status_note: string | null; created_at: string; updated_at: string; version: number;
   details_pending: boolean; imported_batch_id: string | null;
 }
-export interface Paged<T> { total: number; page: number; pageSize: number; rows: T[] }
+export interface Paged<T> { total: number; page: number; pageSize: number; rows: T[]; statusCounts?: Record<string, number> }
 export interface Option { id: string; name: string }
 
 export interface Issue { field: string; message: string }
@@ -105,12 +105,12 @@ export interface ScoreRow {
   source?: 'annual' | 'excel'; utilization?: UtilAdvice | null; assessment?: ValueAssessment;
 }
 export interface ScoreList {
-  year: number; window: { from: number; to: number }; formula: { version: string };
+  year: number; window: { from: number; to: number }; formula: { version: string }; weights: FactorScores;
   summary: { total: number; scored: number; notScored: number; average: number | null; high: number; good: number; medium: number; low: number; warning: number };
   rows: ScoreRow[];
 }
 export interface ScoreDetail {
-  year: number; window: { from: number; to: number }; formula: { version: string };
+  year: number; window: { from: number; to: number }; formula: { version: string }; weights: FactorScores;
   outcome: { status: 'scored'; breakdown: Breakdown; inputs: Record<string, number | boolean>; years: number[]; source: 'annual' | 'excel'; imported?: { filename: string; uploadedAt: string; sheet: string; sourceRow: number } } | { status: 'no_data' | 'incomplete'; problems: string[]; years: number[] };
   rank: number | null; rankOf: number; utilization: UtilAdvice | null; assessment: ValueAssessment | null;
   annual: { fiscalYear: number; status: string; confirmed: boolean; metrics: { maintenanceCost: number; utilizationPctHours: number | null; downtimePct: number | null } | null; revenue: number | null; caseCount: number | null; annualScore: number | null }[];

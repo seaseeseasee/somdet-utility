@@ -11,16 +11,6 @@ const DEMO_ACCOUNTS = [
   [NEW, 'เจ้าหน้าที่ใหม่ (จำลองข้อมูลจาก Provider ID)'],
 ];
 
-const STEPS: [string, string][] = [
-  ['นำเข้าข้อมูล', 'อัปโหลดไฟล์ Excel ตามแบบฟอร์ม หรือบันทึกข้อมูลรายปีของแต่ละเครื่อง'],
-  ['ระบบคำนวณคะแนน', 'ตรวจความถูกต้องทุกแถว แล้วคิด Utility Score และอันดับให้อัตโนมัติ'],
-  ['ใช้ประกอบการตัดสินใจ', 'ดู Dashboard เทียบหน่วยงาน/โรงพยาบาล และส่งออกรายงาน PDF / Excel'],
-];
-const FACTORS: [string, number][] = [
-  ['Utilization', 25], ['Clinical', 20], ['Financial', 20], ['Reliability', 15], ['Satisfaction', 10], ['Strategic', 10],
-];
-const TRUST = ['ตรวจสอบที่มาได้ทุกคะแนน', 'แต่ละโรงพยาบาลเห็นเฉพาะข้อมูลของตน', 'ประวัติการแก้ไขตรวจสอบย้อนหลังได้'];
-
 export function Login() {
   const { me, refresh } = useAuth();
   const nav = useNavigate();
@@ -69,33 +59,9 @@ export function Login() {
             <small style={{ fontSize: 13 }}>ระบบวิเคราะห์ความคุ้มค่าครุภัณฑ์ทางการแพทย์</small>
           </div>
         </div>
-        <div className="lg-hero">
-          <h2>รู้ว่าครุภัณฑ์เครื่องไหนคุ้มค่า<br />ก่อนตัดสินใจซื้อ ซ่อม หรือทดแทน</h2>
-          <p>นำเข้าไฟล์ Excel Utility Analysis หรือบันทึกข้อมูลรายปี ระบบคำนวณ Utility Score จาก 6 ปัจจัยให้ทันที และแสดงที่มาของทุกคะแนน</p>
-        </div>
-
-        <ol className="lg-steps" aria-label="ขั้นตอนการใช้งาน">
-          {STEPS.map(([t, d], i) => (
-            <li key={t}><span className="n">{i + 1}</span><div><b>{t}</b><span>{d}</span></div></li>
-          ))}
-        </ol>
-
-        <div className="lg-factors">
-          <div className="lg-cap">Utility Score = ผลรวมถ่วงน้ำหนัก 6 ปัจจัย (ค่าเริ่มต้น)</div>
-          <div className="lg-fgrid">
-            {FACTORS.map(([name, w]) => (
-              <div key={name} className="lg-f">
-                <div className="hrow between"><span>{name}</span><b className="num">{w}%</b></div>
-                <div className="bar" aria-hidden><i style={{ width: `${w * 4}%` }} /></div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <ul className="lg-trust">
-          {TRUST.map((t) => <li key={t}>{t}</li>)}
-        </ul>
-        <p className="lg-foot">ระบบนี้ใช้สำหรับบุคลากรของหน่วยงานเท่านั้น การเข้าใช้งานทุกครั้งถูกบันทึก</p>
+        <h2>ข้อมูลการใช้งาน ต้นทุน และผลลัพธ์ของครุภัณฑ์ย้อนหลัง 5 ปี ในที่เดียว</h2>
+        <p>สนับสนุนการตัดสินใจจัดซื้อ บำรุงรักษา ทดแทน และเพิ่มจำนวนครุภัณฑ์ ด้วยคะแนน Utility 6 ปัจจัยที่ตรวจสอบที่มาได้ทุกคะแนน</p>
+        <p style={{ marginTop: 'auto', fontSize: 13 }}>ระบบนี้ใช้สำหรับบุคลากรของหน่วยงานเท่านั้น การเข้าใช้งานทุกครั้งถูกบันทึก</p>
       </div>
       <div className="lg-r">
         <div className="lg-card">

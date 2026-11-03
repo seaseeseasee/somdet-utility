@@ -4,6 +4,9 @@ import path from 'node:path';
 import { ADVICE_DISCLAIMER } from '@mu/formula';
 import { REC, SECTION_LABEL, thaiDate, type ReportData } from './data.js';
 
+const FACTOR_HEADS = [['utilization', 'Utilization'], ['clinical', 'Clinical'], ['financial', 'Financial'], ['reliability', 'Reliability'], ['satisfaction', 'Satisfaction'], ['strategic', 'Strategic']] as const;
+const pct = (w: number) => `${Number((w * 100).toFixed(4))}%`;
+
 const require = createRequire(import.meta.url);
 
 /** ฝังฟอนต์ไทย (IBM Plex Sans Thai, OFL) ในรายงาน เพื่อไม่ต้องพึ่งอินเทอร์เน็ตและพิมพ์ภาษาไทยถูกต้อง */
@@ -87,7 +90,7 @@ export function renderReportHtml(d: ReportData): string {
     ${multi ? '<p class="note">อันดับคิดภายในแต่ละโรงพยาบาล</p>' : ''}
     <p class="note">ระดับการใช้งาน: 5 ≥ 80% · 4 60–79.99% · 3 40–59.99% · 2 20–39.99% · 1 &lt; 20% · ${esc(ADVICE_DISCLAIMER)}</p>`;
   const factors = `<h2>คะแนนแยก 6 ปัจจัย</h2>
-    <table class="sm"><thead><tr><th>รายการ</th><th class="r">Utilization<br>25%</th><th class="r">Clinical<br>20%</th><th class="r">Financial<br>20%</th><th class="r">Reliability<br>15%</th><th class="r">Satisfaction<br>10%</th><th class="r">Strategic<br>10%</th><th class="r">Payback<br>(ปี)</th><th class="r">ต้นทุน/เคส<br>(บาท)</th><th class="r">Utility<br>Score</th><th>ปีงบที่ใช้</th></tr></thead>
+    <table class="sm"><thead><tr><th>รายการ</th>${FACTOR_HEADS.map(([k, l]) => `<th class="r">${l}<br>${pct(d.weights[k])}</th>`).join('')}<th class="r">Payback<br>(ปี)</th><th class="r">ต้นทุน/เคส<br>(บาท)</th><th class="r">Utility<br>Score</th><th>ปีงบที่ใช้</th></tr></thead>
     <tbody>${d.rows.map((r) => { const s = r.breakdown.scores; return `<tr><td>${esc(r.code)}<br><span class="m">${esc(r.name)}</span></td>
       <td class="r">${n(s.utilization)}</td><td class="r">${n(s.clinical)}</td><td class="r">${n(s.financial)}</td><td class="r">${n(s.reliability)}</td><td class="r">${n(s.satisfaction)}</td><td class="r">${n(s.strategic)}</td>
       <td class="r">${r.breakdown.paybackYears === null ? 'N/A' : n(r.breakdown.paybackYears, 2)}</td><td class="r">${r.breakdown.costPerCase === null ? 'N/A' : baht(r.breakdown.costPerCase)}</td>
