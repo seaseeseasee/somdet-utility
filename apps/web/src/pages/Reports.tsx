@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, type Option } from '../lib/api';
+import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { latestFiscalYear as latestYear, thDate } from '../lib/format';
 import { useOptions } from '../lib/useApi';

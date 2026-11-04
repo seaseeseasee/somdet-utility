@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, type Equipment, type ScoreDetail, type YearList } from '../lib/api';
-import { f1, f2, REC_TEXT, RecChip, ScoreBadge } from '../lib/score';
+import { type Equipment, type ScoreDetail, type YearList } from '../lib/api';
+import { f1, REC_TEXT, RecChip, ScoreBadge } from '../lib/score';
 import { useApi } from '../lib/useApi';
 import { Breakdown } from './Scores';
 import { TrendCharts } from './TrendCharts';

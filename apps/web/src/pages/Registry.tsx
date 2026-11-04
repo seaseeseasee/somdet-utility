@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, type Equipment, type Option, type Paged } from '../lib/api';
+import { api, type Equipment, type Paged } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ageYears, baht, STATUS } from '../lib/format';
 import { useOptions } from '../lib/useApi';

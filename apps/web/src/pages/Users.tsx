@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, ApiError, type Option } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { thDate } from '../lib/format';
 import { useOptions } from '../lib/useApi';

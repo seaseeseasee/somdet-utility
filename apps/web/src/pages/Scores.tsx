@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type Option, type ScoreDetail, type ScoreList, type ScoreRow } from '../lib/api';
+import { api, type ScoreDetail, type ScoreList, type ScoreRow } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { baht, latestFiscalYear } from '../lib/format';
 import { useOptions } from '../lib/useApi';

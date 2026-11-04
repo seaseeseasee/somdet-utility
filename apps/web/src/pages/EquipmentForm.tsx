@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api, ApiError, type Equipment, type Option } from '../lib/api';
+import { api, ApiError, type Equipment } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { CURRENT_BE_YEAR, STATUS, thDate } from '../lib/format';
 import { useOptions } from '../lib/useApi';

@@ -1,12 +1,12 @@
-import type { ChartConfiguration } from 'chart.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, type HospitalDashboard } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { BAND_COLOR, ChartView, COLORS, grid, millions, SERIES } from '../lib/chart';
+import { ChartView } from '../lib/chart';
 import { baht, latestFiscalYear as latestYear, mb } from '../lib/format';
 import { useOptions } from '../lib/useApi';
-import { f1, FACTORS, RecChip, ScoreBadge, UtilChip } from '../lib/score';
+import { f1, RecChip, ScoreBadge, UtilChip } from '../lib/score';
+import { buildDashboardCharts } from './dashboardCharts';
 
 const PRICE: [string, string, string?][] = [['', 'ทุกช่วงราคา'], ['1000000', '≥ 1 ล้านบาท'], ['1000000-5000000', '1–5 ล้านบาท'], ['5000000-20000000', '5–20 ล้านบาท'], ['20000000', '> 20 ล้านบาท']];
 const LEVEL: [string, string][] = [['', 'ทุกระดับ'], ['high', '80–100'], ['good', '60–79'], ['medium', '40–59'], ['low', '< 40'], ['none', 'ยังไม่มีคะแนน']];
@@ -51,57 +51,9 @@ export function Dashboard() {
   }, [year, hospital, dept, type, q, price, level]);
 
   const scored = useMemo(() => (d?.equipment ?? []).filter((e) => e.utilityScore !== null), [d]);
-  const years = d?.totals.map((t) => String(t.fiscalYear)) ?? [];
   const pickedEq = scored.filter((e) => picked.includes(e.id));
-
-  const cfg = useMemo(() => {
-    if (!d) return null;
-    const lineFor = (key: 'utilizationPct' | 'downtimePct', label: string): ChartConfiguration => ({
-      type: 'line',
-      data: {
-        labels: years,
-        datasets: [
-          { label: `${label} รวมทุกรายการ`, data: d.totals.map((t) => t[key]), borderColor: COLORS.navy, backgroundColor: COLORS.navy, borderWidth: 3, tension: 0.3, spanGaps: false },
-          ...pickedEq.map((e, i) => ({ label: e.code, data: e.series.map((s) => s[key]), borderColor: SERIES[(i + 1) % SERIES.length], backgroundColor: SERIES[(i + 1) % SERIES.length], borderDash: [5, 4], tension: 0.3 })),
-        ],
-      },
-      options: { plugins: { legend: { position: 'bottom' } }, scales: { y: { ...grid, beginAtZero: true, ticks: { callback: (v) => `${v}%` } }, x: { grid: { display: false } } } },
-    });
-    return {
-      score: {
-        type: 'bar',
-        data: { labels: scored.map((e) => e.name), datasets: [{ data: scored.map((e) => e.utilityScore), backgroundColor: scored.map((e) => BAND_COLOR[e.recommendation!]), borderRadius: 5, barThickness: 18 }] },
-        options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ...grid, min: 0, max: 100 }, y: { grid: { display: false } } } },
-      } as ChartConfiguration,
-      radar: {
-        type: 'radar',
-        data: {
-          labels: FACTORS.map((f) => f[1]),
-          datasets: pickedEq.map((e, i) => ({ label: `${e.code} ${e.name}`, data: FACTORS.map(([k]) => e.scores![k]), borderColor: SERIES[i % SERIES.length], backgroundColor: `${SERIES[i % SERIES.length]}22`, pointRadius: 3 })),
-        },
-        options: { plugins: { legend: { position: 'bottom' } }, scales: { r: { min: 0, max: 100, ticks: { stepSize: 20, backdropColor: 'transparent' }, grid: { color: COLORS.grid }, angleLines: { color: COLORS.grid } } } },
-      } as ChartConfiguration,
-      util: lineFor('utilizationPct', 'Utilization'),
-      down: lineFor('downtimePct', 'Downtime'),
-      maint: {
-        type: 'bar',
-        data: { labels: years, datasets: [{ label: 'ค่าบำรุงรักษารวม', data: d.totals.map((t) => t.maintenanceCost), backgroundColor: COLORS.warn, borderRadius: 4 }] },
-        options: { plugins: { legend: { display: false } }, scales: { y: { ...grid, beginAtZero: true, ticks: { callback: millions } }, x: { grid: { display: false } } } },
-      } as ChartConfiguration,
-      rev: {
-        type: 'bar',
-        data: {
-          labels: years,
-          datasets: [
-            { label: 'รายได้', data: d.totals.map((t) => t.revenue), backgroundColor: COLORS.good, borderRadius: 4 },
-            { label: 'ค่าบำรุงรักษา', data: d.totals.map((t) => t.maintenanceCost), backgroundColor: COLORS.warn, borderRadius: 4 },
-          ],
-        },
-        options: { plugins: { legend: { position: 'bottom' } }, scales: { y: { ...grid, beginAtZero: true, ticks: { callback: millions } }, x: { grid: { display: false } } } },
-      } as ChartConfiguration,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [d, picked]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const cfg = useMemo(() => (d ? buildDashboardCharts(d, scored, pickedEq) : null), [d, picked]);
 
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length >= 3 ? [...p.slice(1), id] : [...p, id]));
   const k = d?.kpis;
