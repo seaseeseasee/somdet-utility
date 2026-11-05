@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import ExcelJS from 'exceljs';
 import { HttpError } from '../errors.js';
-import type { FormulaSet } from '@mu/formula';
+import type { FactorScores, FormulaSet } from '@mu/formula';
 import { canRegister } from './register.js';
 import { missingFields, scoreDataset, settingsProblems, type ScoringSettings, type UtilityInput } from './score.js';
 
@@ -231,6 +231,12 @@ export interface PreviewRow extends ParsedRow {
   recommendation: string | null;
   paybackYears: number | null;
   financialScore: number | null;
+  /** E: ปีที่ใช้งานแล้ว (null = ไม่มีคะแนน) */
+  ageYears: number | null;
+  /** N: ต้นทุนต่อเคส (null = N/A หรือไม่มีคะแนน) */
+  costPerCase: number | null;
+  /** P–U: คะแนน 6 ปัจจัย (null = ไม่มีคะแนน) */
+  scores: FactorScores | null;
 }
 
 export interface PreviewSheet {
@@ -285,6 +291,9 @@ export function buildPreview(wb: ParsedWorkbook, settings: FormulaSet, now = new
         recommendation: x?.score?.recommendationText ?? null,
         paybackYears: x?.score?.paybackYears ?? null,
         financialScore: x?.score?.scores.financial ?? null,
+        ageYears: x?.score?.ageYears ?? null,
+        costPerCase: x?.score?.costPerCase ?? null,
+        scores: x?.score?.scores ?? null,
       };
     });
     return { sheet: s.sheet, title: s.title, isExample: s.isExample, selected: !s.isExample, rows, summary: summarize(rows) };

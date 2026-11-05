@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type ScoreDetail, type ScoreList, type ScoreRow } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { baht, latestFiscalYear } from '../lib/format';
+import { baht, latestFiscalYear, num } from '../lib/format';
 import { useOptions } from '../lib/useApi';
 import { ADVICE_DISCLAIMER, f1, f2, FACTORS, RecChip, ScoreBadge, UtilChip, ValueChip, weightPct } from '../lib/score';
 
@@ -123,8 +123,9 @@ export function Scores() {
             <table className="tbl compact">
               <thead><tr>
                 <th className="c">อันดับ</th><th>ครุภัณฑ์</th>
+                <th className="r">ปีที่ใช้<br />งานแล้ว</th><th className="r">ค่าบำรุงรักษา<br />สะสม (บาท)</th>
                 {FACTORS.map(([k, l]) => <th key={k} className="r">{l}<br /><span className="muted">{weightPct(data?.weights[k])}</span></th>)}
-                <th className="r">Payback<br />(ปี)</th><th className="c">Utility<br />Score</th><th>ระดับการใช้งาน</th><th>ความคุ้มค่า<br /><span className="muted">(เกณฑ์เสริม)</span></th>
+                <th className="r">ต้นทุน<br />ต่อเคส (บาท)</th><th className="r">Payback<br />(ปี)</th><th className="c">Utility<br />Score</th><th>ข้อเสนอแนะ</th><th>ระดับการใช้งาน</th><th>ความคุ้มค่า<br /><span className="muted">(เกณฑ์เสริม)</span></th>
               </tr></thead>
               <tbody>
                 {scored.map((r: ScoreRow) => (
@@ -135,9 +136,13 @@ export function Scores() {
                         {r.source === 'excel' && <span className="chip n" style={{ marginLeft: 6 }} title="คะแนนจากข้อมูลสะสมในไฟล์ Excel จนกว่าจะมีข้อมูลรายปีที่ยืนยันแล้ว">จากไฟล์ Excel</span>}</div>
                       <div className="muted">{r.equipment.code} · {central ? r.equipment.hospitalName : r.equipment.department}</div>
                     </td>
+                    <td className="r num">{r.ageYears ?? '—'}</td>
+                    <td className="r num">{num(r.maintenanceCost)}</td>
                     {FACTORS.map(([k]) => <td key={k} className="r num">{f1(r.scores?.[k])}</td>)}
+                    <td className="r num">{r.costPerCase === null || r.costPerCase === undefined ? <span className="muted">N/A</span> : num(r.costPerCase, 2)}</td>
                     <td className="r num">{r.paybackYears === null ? <span className="muted">N/A</span> : f2(r.paybackYears)}</td>
                     <td className="c" title={r.recommendationText}><ScoreBadge v={r.utilityScore!} /></td>
+                    <td style={{ minWidth: 150, fontSize: 13 }}>{r.recommendationText}</td>
                     <td><UtilChip u={r.utilization} /></td>
                     <td><ValueChip a={r.assessment} /></td>
                   </tr>

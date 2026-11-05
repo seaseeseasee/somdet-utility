@@ -101,6 +101,8 @@ export interface ScoreRow {
   equipment: { id: string; code: string; name: string; hospitalId: string; hospitalName: string; department: string; type: string; purchaseYear: number; purchasePrice: number; status: string };
   status: 'scored' | 'no_data' | 'incomplete'; dataYears: number[]; rank: number | null;
   utilityScore?: number; scores?: FactorScores; paybackYears?: number | null; costPerCase?: number | null;
+  /** E: ปีที่ใช้งานแล้ว · H: ค่าบำรุงรักษาสะสม (บาท) */
+  ageYears?: number; maintenanceCost?: number;
   recommendation?: string; recommendationText?: string; warning?: boolean; utilizationPct?: number; problems?: string[];
   source?: 'annual' | 'excel'; utilization?: UtilAdvice | null; assessment?: ValueAssessment;
 }

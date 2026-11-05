@@ -14,6 +14,8 @@ const defaultYear = () => fiscalYearOf(new Date()) - 1;
 interface ScoreRow {
   equipment: Record<string, unknown>; status: string; dataYears: number[]; rank: number | null;
   utilityScore?: number; scores?: unknown; paybackYears?: number | null; costPerCase?: number | null;
+  /** E: ปีที่ใช้งานแล้ว · H: ค่าบำรุงรักษาสะสม (บาท) ที่ใช้คำนวณ */
+  ageYears?: number; maintenanceCost?: number;
   recommendation?: string; recommendationText?: string; warning?: boolean; utilizationPct?: number; problems?: string[];
   source?: 'annual' | 'excel'; utilization?: UtilizationAdvice | null; assessment?: ValueAssessment;
 }
@@ -37,7 +39,7 @@ export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
         ...(o.status === 'scored'
           ? {
               utilityScore: o.breakdown.utilityScore, scores: o.breakdown.scores, paybackYears: o.breakdown.paybackYears,
-              costPerCase: o.breakdown.costPerCase, recommendation: o.breakdown.recommendation, recommendationText: o.breakdown.recommendationText,
+              costPerCase: o.breakdown.costPerCase, ageYears: o.breakdown.ageYears, maintenanceCost: o.inputs.maintenanceCost, recommendation: o.breakdown.recommendation, recommendationText: o.breakdown.recommendationText,
               warning: o.breakdown.warning, utilizationPct: o.inputs.utilizationPct, source: o.source,
               utilization: utilizationFor(e, o.inputs.utilizationPct),
               assessment: assessValue(o.breakdown, { usefulLifeYears: e.useful_life_years }),

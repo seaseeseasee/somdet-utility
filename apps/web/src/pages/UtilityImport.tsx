@@ -1,16 +1,18 @@
 import { useState, type DragEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, type FactorScores } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { num, thDate } from '../lib/format';
 import { useOptions } from '../lib/useApi';
-import { f2, ScoreBadge } from '../lib/score';
+import { ScoreBadge } from '../lib/score';
 import { ImportHistory } from './ImportHistory';
 
 type Status = 'ok' | 'warning' | 'incomplete' | 'error';
 interface PRow {
   sourceRow: number; seqNo: number; name: string; status: Status; register: boolean; errors: string[]; warnings: string[]; missing: string[];
   utilityScore: number | null; rank: number | null; recommendation: string | null; paybackYears: number | null;
+  /** E, N, P–U ที่ระบบคำนวณ (null = แถวนี้ไม่มีคะแนน) */
+  ageYears: number | null; costPerCase: number | null; scores: FactorScores | null;
   input: Record<string, number | null>;
 }
 interface PSheet { sheet: string; title: string; isExample: boolean; selected: boolean; rows: PRow[]; summary: Record<Status, number> }
@@ -20,6 +22,20 @@ interface Preview {
   settings: { currentYearBe: number; fromFile: { values: unknown; problems: string[] } | null };
   sheets: PSheet[];
 }
+
+/** หัวตารางตามคอลัมน์ในไฟล์ Excel (แถว 3) — ตัวอักษรคอลัมน์กำกับไว้ให้เทียบกับไฟล์ได้ */
+const XL_HEADS: [string, string, string][] = [
+  ['A', 'ลำดับ', 'c'], ['B', 'รายการครุภัณฑ์', ''], ['C', 'ปีที่ซื้อ (พ.ศ.)', 'c'], ['D', 'ราคาซื้อ (บาท)', 'r'], ['E', 'ปีที่ใช้งานแล้ว (ปี)', 'r'],
+  ['F', 'Utilization (%)', 'r'], ['G', 'จำนวนเคสสะสม', 'r'], ['H', 'ค่าบำรุงรักษาสะสม (บาท)', 'r'], ['I', 'Downtime สะสม (%)', 'r'],
+  ['J', 'รายได้สะสม (บาท)', 'r'], ['K', 'คะแนนผลลัพธ์ทางคลินิก (1-5)', 'c'], ['L', 'คะแนนความพึงพอใจ (1-5)', 'c'], ['M', 'คะแนนมูลค่าเชิงกลยุทธ์ (1-5)', 'c'],
+  ['N', 'ต้นทุนต่อเคส (บาท)', 'r'], ['O', 'Payback Period (ปี)', 'r'], ['P', 'Utilization Score', 'r'], ['Q', 'Financial Score', 'r'],
+  ['R', 'Reliability Score', 'r'], ['S', 'Clinical Score', 'r'], ['T', 'Satisfaction Score', 'r'], ['U', 'Strategic Score', 'r'],
+  ['V', 'Utility Score รวม (0-100)', 'c'], ['W', 'อันดับ', 'c'], ['X', 'ข้อเสนอแนะ', ''],
+];
+/** P–U เรียงตามไฟล์ Excel */
+const XL_FACTORS: (keyof FactorScores)[] = ['utilization', 'financial', 'reliability', 'clinical', 'satisfaction', 'strategic'];
+/** ช่องที่ระบบคำนวณ: แถวที่ไม่มีคะแนนแสดง — · N/A ตามสูตร Excel เมื่อหารด้วย 0 */
+const calc = (scored: boolean, v: number | null | undefined, d = 2) => (!scored ? '—' : v === null || v === undefined ? 'N/A' : num(v, d));
 
 const STATUS: Record<Status, [string, string]> = { ok: ['พร้อม', 'g'], warning: ['มีข้อสังเกต', 'w'], incomplete: ['ข้อมูลไม่ครบ', 'n'], error: ['ผิดพลาด', 'r'] };
 
@@ -148,23 +164,32 @@ export function UtilityImport() {
           {sheet && (
             <div className="card flush"><div className="tbl-wrap">
               <table className="tbl">
-                <thead><tr><th className="c">แถว</th><th>รายการครุภัณฑ์</th><th className="c">ปีซื้อ</th><th className="r">ราคา</th><th className="r">Util %</th><th className="r">เคส</th>
-                  <th className="r">DT %</th><th className="r">รายได้</th><th className="c">คะแนน 1–5</th><th className="r">Payback</th><th className="c">Score</th><th className="c">อันดับ</th><th>สถานะ / ข้อสังเกต</th></tr></thead>
+                <thead><tr><th className="c">แถวในไฟล์</th>
+                  {XL_HEADS.map(([col, label, align]) => <th key={col} className={align}><span className="muted">{col}</span><br />{label}</th>)}
+                  <th>สถานะ / ข้อสังเกต</th></tr></thead>
                 <tbody>
                   {sheet.rows.map((r) => (
                     <tr key={r.sourceRow} className={`st-${r.status}`}>
                       <td className="c num">{r.sourceRow}</td>
+                      <td className="c num">{r.seqNo}</td>
                       <td style={{ minWidth: 220 }}>{r.name || <span className="muted">—</span>}</td>
                       <td className="c num">{r.input.purchaseYearBe ?? '—'}</td>
                       <td className="r num">{num(r.input.purchasePrice, 2)}</td>
+                      <td className="r num">{calc(r.utilityScore !== null, r.ageYears, 0)}</td>
                       <td className="r num">{num(r.input.utilizationPct, 2)}</td>
                       <td className="r num">{num(r.input.totalCases)}</td>
+                      <td className="r num">{num(r.input.maintenanceCostTotal, 2)}</td>
                       <td className="r num">{num(r.input.downtimePct, 2)}</td>
                       <td className="r num">{num(r.input.revenueTotal, 2)}</td>
-                      <td className="c num">{[r.input.clinicalRating, r.input.satisfactionRating, r.input.strategicRating].map((v) => v ?? '—').join(' / ')}</td>
-                      <td className="r num">{r.utilityScore !== null ? f2(r.paybackYears) : '—'}</td>
+                      <td className="c num">{r.input.clinicalRating ?? '—'}</td>
+                      <td className="c num">{r.input.satisfactionRating ?? '—'}</td>
+                      <td className="c num">{r.input.strategicRating ?? '—'}</td>
+                      <td className="r num">{calc(r.utilityScore !== null, r.costPerCase)}</td>
+                      <td className="r num">{calc(r.utilityScore !== null, r.paybackYears)}</td>
+                      {XL_FACTORS.map((k) => <td key={k} className="r num">{calc(r.utilityScore !== null, r.scores?.[k])}</td>)}
                       <td className="c">{r.utilityScore !== null ? <ScoreBadge v={r.utilityScore} /> : '—'}</td>
                       <td className="c num">{r.rank ?? '—'}</td>
+                      <td style={{ minWidth: 200 }}>{r.recommendation ?? <span className="muted">—</span>}</td>
                       <td style={{ minWidth: 260 }}>
                         <span className={`chip ${STATUS[r.status][1]}`}>{STATUS[r.status][0]}</span>
                         {r.register && <span className="chip b" style={{ marginLeft: 4 }}>สร้างในทะเบียน</span>}
@@ -173,7 +198,7 @@ export function UtilityImport() {
                       </td>
                     </tr>
                   ))}
-                  {!sheet.rows.length && <tr><td colSpan={13} className="muted">ชีตนี้ไม่มีข้อมูล</td></tr>}
+                  {!sheet.rows.length && <tr><td colSpan={XL_HEADS.length + 2} className="muted">ชีตนี้ไม่มีข้อมูล</td></tr>}
                 </tbody>
               </table>
             </div></div>
