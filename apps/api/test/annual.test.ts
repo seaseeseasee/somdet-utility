@@ -58,6 +58,14 @@ describe('บันทึกและยืนยันข้อมูลรา�
     expect(r.statusCode).toBe(400);
     expect(r.json().issues.map((i: { field: string }) => i.field)).toEqual(expect.arrayContaining(['clinicalRating', 'availableDays']));
   });
+  it('ตัวเลขเกินที่ฐานข้อมูลเก็บได้ได้ 400 พร้อมช่องที่ติด ไม่ใช่ 500', async () => {
+    const r = await put('aEntry', 'DEMO-002', FY, { repairCost: 1e12, pmCost: 5 });
+    expect(r.statusCode).toBe(400);
+    expect(r.json().issues).toEqual([{ field: 'repairCost', message: 'ตัวเลขมากเกินกว่าที่ระบบเก็บได้ (ไม่เกิน 999,999,999,999.99)' }]);
+    const c = await put('aEntry', 'DEMO-002', FY, { useCount: 3e9 });
+    expect(c.statusCode).toBe(400);
+    expect(c.json().issues.map((i: { field: string }) => i.field)).toEqual(['useCount']);
+  });
   it('ยืนยันขณะข้อมูลไม่ครบไม่ได้ (422 พร้อมรายการ)', async () => {
     const r = await S.aEntry!.post(`/api/annual/${recId}/submit`, {});
     expect(r.statusCode).toBe(422);

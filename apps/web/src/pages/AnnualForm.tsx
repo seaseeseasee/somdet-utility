@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 import { baht, thDate } from '../lib/format';
 import { MoneyInput } from '../lib/MoneyInput';
 import { useFormulaVersion } from '../lib/useApi';
-import { MONEY, RATINGS, RELIABILITY, TONE, UNIT_REC, USAGE, toBody, toForm, type Form, type NumField } from './annual/annualForm.model';
+import { LABEL, MONEY, RATINGS, RELIABILITY, TONE, UNIT_REC, USAGE, toBody, toForm, type Form, type NumField } from './annual/annualForm.model';
 import { CalcPanel, Field, MaintenanceSection, ReviewHistory, StatusSteps, UnlockCard, type Act } from './annual/AnnualFormParts';
 
 export function AnnualForm() {
@@ -91,7 +91,7 @@ export function AnnualForm() {
       {msg && (
         <div className={`note ${msg.tone}`} role="status">
           <b>{msg.text}</b>
-          {msg.list && msg.list.length > 0 && <ul>{msg.list.slice(0, 8).map((i) => <li key={i.field + i.message}>{i.message}</li>)}</ul>}
+          {msg.list && msg.list.length > 0 && <ul>{msg.list.slice(0, 8).map((i) => <li key={i.field + i.message}>{LABEL[i.field] ? `${LABEL[i.field]}: ` : ''}{i.message}</li>)}</ul>}
         </div>
       )}
       {!editable && status !== 'new' && (

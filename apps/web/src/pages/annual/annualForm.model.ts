@@ -24,6 +24,11 @@ export const RATINGS: [string, string, string][] = [
   ['satisfactionRating', 'Satisfaction (1–5)', 'จากแบบสอบถามผู้ใช้/ผู้ป่วย'],
   ['strategicRating', 'Strategic Value (1–5)', 'การรองรับ Service Plan/นโยบาย'],
 ];
+/** ชื่อช่องภาษาไทย ใช้นำหน้าข้อผิดพลาดที่ API ส่งกลับ */
+export const LABEL: Record<string, string> = Object.fromEntries([
+  ...[...USAGE, ...MONEY, ...RELIABILITY, ...RATINGS].map((f) => [f[0], f[1]]),
+  ['revenue', 'รายได้จากการให้บริการ'], ['cost', 'ค่าใช้จ่ายรายการบำรุงรักษา'],
+]);
 const NUMERIC = [...USAGE, ...MONEY, ['revenue'], ...RELIABILITY, ...RATINGS].map((f) => f[0] as string);
 const TEXT = ['ratingRationale', 'clinicalNecessity', 'condition', 'inspectedAt', 'inspectionNote', 'safetyDetail', 'recallStatus', 'unitRecommendation', 'rationale', 'changeReason'];
 export const UNIT_REC: Record<string, string> = { continue: 'ใช้ต่อ', increase_use: 'เพิ่มการใช้ประโยชน์', repair: 'ซ่อม', reallocate: 'ย้ายจัดสรร', replace: 'ทดแทน', decommission: 'จำหน่าย (Decommission)' };
