@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, type AnnualDetail, type Issue, type YearList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { baht, thDate } from '../lib/format';
+import { MoneyInput } from '../lib/MoneyInput';
 import { useFormulaVersion } from '../lib/useApi';
 import { MONEY, RATINGS, RELIABILITY, TONE, UNIT_REC, USAGE, toBody, toForm, type Form, type NumField } from './annual/annualForm.model';
 import { CalcPanel, Field, MaintenanceSection, ReviewHistory, StatusSteps, UnlockCard, type Act } from './annual/AnnualFormParts';
@@ -59,7 +60,9 @@ export function AnnualForm() {
   if (!d || !years) return msg ? <div className="note red">{msg.text}</div> : <div className="empty">กำลังโหลด…</div>;
   const num = (f: NumField) => (
     <Field key={f[0]} k={f[0]} label={f[1]} req={f[3]} hint={f[4] ?? f[2]} issue={issues[f[0]]}>
-      <input id={f[0]} inputMode="decimal" className={`in num ${issues[f[0]] ? 'err' : ''}`} value={String(form[f[0]] ?? '')} onChange={set(f[0])} disabled={!editable} />
+      {f[2] === 'บาท'
+        ? <MoneyInput id={f[0]} className={`in num ${issues[f[0]] ? 'err' : ''}`} value={String(form[f[0]] ?? '')} onChange={set(f[0])} disabled={!editable} />
+        : <input id={f[0]} inputMode="decimal" className={`in num ${issues[f[0]] ? 'err' : ''}`} value={String(form[f[0]] ?? '')} onChange={set(f[0])} disabled={!editable} />}
     </Field>
   );
   const maint = d.evaluation?.metrics?.maintenanceCost ?? MONEY.reduce((s, f) => s + (Number(form[f[0]]) || 0), 0);
@@ -112,7 +115,7 @@ export function AnnualForm() {
                 <input id="maintTotal" className="in calc num" readOnly tabIndex={-1} value={baht(maint)} />
               </Field>
               <Field k="revenue" label="รายได้จากการให้บริการ" req issue={issues.revenue} hint="ถ้าไม่มีรายได้ตรง ให้กรอก 0 และเลือกช่องด้านล่าง (Financial Score = 50)">
-                <input id="revenue" inputMode="decimal" className={`in num ${issues.revenue ? 'err' : ''}`} value={String(form.revenue)} onChange={set('revenue')} disabled={!editable} />
+                <MoneyInput id="revenue" className={`in num ${issues.revenue ? 'err' : ''}`} value={String(form.revenue)} onChange={set('revenue')} disabled={!editable} />
               </Field>
               <div className="fld" style={{ justifyContent: 'center' }}>
                 <label className="hrow" style={{ fontWeight: 400 }}>

@@ -53,7 +53,7 @@ export function Reports() {
   const afterDownload = () => setTimeout(() => void loadRecent(), 2500);
 
   return (
-    <div className="split" style={{ gridTemplateColumns: '340px minmax(0,1fr)' }}>
+    <div className="split rep">
       <div className="stack">
         <div className="card stack">
           <h3>ตั้งค่ารายงาน</h3>

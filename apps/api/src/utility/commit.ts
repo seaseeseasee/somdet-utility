@@ -109,7 +109,6 @@ async function removeOrphans(db: Db, ids: string[]) {
     await db.query(
       `DELETE FROM equipment e WHERE e.id = ANY($1) AND e.details_pending
          AND NOT EXISTS (SELECT 1 FROM annual_record a WHERE a.equipment_id = e.id)
-         AND NOT EXISTS (SELECT 1 FROM score_result s WHERE s.equipment_id = e.id)
          AND NOT EXISTS (SELECT 1 FROM utility_record x WHERE x.equipment_id = e.id AND x.deleted_at IS NULL)
        RETURNING e.id, e.code, e.name`,
       [ids],
