@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { type Equipment, type ScoreDetail, type YearList } from '../lib/api';
-import { f1, REC_TEXT, RecChip, ScoreBadge } from '../lib/score';
+import { f1, ScoreBadge } from '../lib/score';
 import { useApi } from '../lib/useApi';
 import { Breakdown } from './Scores';
 import { TrendCharts } from './TrendCharts';
@@ -112,17 +112,6 @@ export function EquipmentDetail() {
                   ))}
                 </tbody>
               </table></div>
-            </div>
-          )}
-          {score && score.history.length > 0 && (
-            <div className="card">
-              <h3>ประวัติการประเมิน (บันทึกเมื่อปิดรอบ)</h3>
-              <table className="tbl"><thead><tr><th>ปีงบ</th><th className="c">Score</th><th>ข้อเสนอแนะ</th><th className="c">อันดับ</th><th>ชุดสูตร</th></tr></thead>
-                <tbody>{score.history.map((h) => (
-                  <tr key={h.computed_at}><td className="num">{h.analysis_year}</td><td className="c"><ScoreBadge v={h.utility_score} /></td>
-                    <td><RecChip level={h.recommendation} text={REC_TEXT[h.recommendation]} /></td>
-                    <td className="c num">{h.rank ?? '—'}</td><td>v{h.formula_version}</td></tr>
-                ))}</tbody></table>
             </div>
           )}
         </div>

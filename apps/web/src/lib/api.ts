@@ -114,7 +114,6 @@ export interface ScoreDetail {
   outcome: { status: 'scored'; breakdown: Breakdown; inputs: Record<string, number | boolean>; years: number[]; source: 'annual' | 'excel'; imported?: { filename: string; uploadedAt: string; sheet: string; sourceRow: number } } | { status: 'no_data' | 'incomplete'; problems: string[]; years: number[] };
   rank: number | null; rankOf: number; utilization: UtilAdvice | null; assessment: ValueAssessment | null;
   annual: { fiscalYear: number; status: string; confirmed: boolean; metrics: { maintenanceCost: number; utilizationPctHours: number | null; downtimePct: number | null } | null; revenue: number | null; caseCount: number | null; annualScore: number | null }[];
-  history: { analysis_year: number; utility_score: number; recommendation: string; warning: boolean; rank: number | null; computed_at: string; formula_version: string }[];
 }
 
 export interface YearPoint { fiscalYear: number; utilizationPct: number | null; downtimePct: number | null; maintenanceCost: number | null; revenue: number | null }

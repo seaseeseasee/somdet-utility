@@ -116,29 +116,19 @@ npm test -w @mu/formula
 TEST_PG_ADMIN_URL=postgres://mu_owner:dev_owner_password_change_me@localhost:5432/postgres npm test -w @mu/api
 ```
 
-ทดสอบผ่านเบราว์เซอร์ (เปิด API + Web และ seed ข้อมูลใหม่ก่อนรันแต่ละไฟล์):
+ทดสอบผ่านเบราว์เซอร์ (e2e) บนชุด Docker แยก `mu-e2e` ที่ seed ข้อมูล DEMO ใหม่แบบ `--annual` ข้อมูลชุดพัฒนาไม่ถูกแตะ
+รันใน container ของ API ซึ่งมี Chromium และ playwright-core อยู่แล้ว (5 ชุด: smoke, scores, dashboards, reports, annual):
 
 ```bash
-node e2e/smoke.cjs http://localhost:5173 .
+export WEB_PORT=38080 API_PORT=33000 DB_PORT=35432
+docker compose -p mu-e2e up -d --build
+docker compose -p mu-e2e --profile seed run --rm seed npx tsx scripts/seed-dev.ts --annual
+docker compose -p mu-e2e cp e2e api:/app/apps/api/e2e
+docker compose -p mu-e2e exec -w /app/apps/api api node e2e/run-all.cjs http://web /tmp/e2e-shots
+docker compose -p mu-e2e down -v --rmi local   # ลบชุดทดสอบเมื่อเสร็จ
 ```
 
-```bash
-node e2e/annual.cjs http://localhost:5173 .
-```
-
-```bash
-node e2e/scores.cjs http://localhost:5173 .
-```
-
-```bash
-node e2e/dashboards.cjs http://localhost:5173 .
-```
-
-```bash
-node e2e/reports.cjs http://localhost:5173 .
-```
-
-(`scores.cjs`, `dashboards.cjs` และ `reports.cjs` ต้อง seed แบบ `--annual`)
+รันซ้ำต้อง seed ใหม่ก่อน (`down -v` แล้ว `up`) เพราะชุดทดสอบเพิ่มและแก้ข้อมูล
 
 ## หลักการสำคัญที่ระบบบังคับใช้
 

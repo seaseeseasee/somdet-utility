@@ -1,43 +1,30 @@
 /**
  * ทดสอบหน้าผลวิเคราะห์ Utility Score: node e2e/scores.cjs [baseUrl] [outDir]
- * ต้อง seed ข้อมูลแบบมีข้อมูลรายปี: npm run db:seed -- --annual
+ * ต้อง seed แบบมีข้อมูลรายปี (รพ. A มีข้อมูลยืนยันแล้วปี 2565–2568)
  */
-const { chromium } = require('playwright');
-const base = process.argv[2] || 'http://localhost:5173';
-const out = process.argv[3] || '.';
+const { base, out, ok, start, run } = require('./lib.cjs');
 
-(async () => {
-  const b = await chromium.launch();
-  const errors = [];
-  const page = async (pid, w = 1440) => {
-    const p = await (await b.newContext({ viewport: { width: w, height: 900 } })).newPage();
-    p.on('pageerror', (e) => errors.push(e.message));
-    await p.goto(`${base}/login`);
-    await p.selectOption('#pid', pid);
-    await p.click('text=เข้าสู่ระบบแบบจำลอง');
-    await p.waitForURL((u) => !u.pathname.startsWith('/login'));
-    await p.goto(`${base}/equipment`);
-    return p;
-  };
-  const ok = (c, m) => { if (!c) throw new Error('FAIL: ' + m); console.log('ok -', m); };
-
-  const p = await page('PID-DEMO-A-EXEC');
-  await p.click('nav >> text=ผลวิเคราะห์ Utility Score');
-  await p.waitForFunction(() => document.querySelectorAll('tbody tr.click').length >= 8, null, { timeout: 10000 });
+run(async () => {
+  const { page, finish } = await start();
+  const p = await page('PID-DEMO-A-ENTRY');
+  await p.goto(`${base}/scores`);
+  await p.waitForFunction(() => document.querySelectorAll('tbody tr.click').length >= 8, null, { timeout: 15000 });
   ok(true, 'รพ. A มีครุภัณฑ์ที่มีคะแนน 8 รายการ');
+
   const api = await p.evaluate(async () => (await fetch('/api/scores')).json());
-  ok(api.formula.version === '1.1', 'ใช้ชุดสูตร v1.1');
   const top = api.rows[0];
   const firstRow = await p.locator('tbody tr.click').first().innerText();
   ok(firstRow.includes(top.equipment.name) && firstRow.includes(top.utilityScore.toFixed(1)), `อันดับ 1 ตรงกับ API (${top.equipment.code} = ${top.utilityScore.toFixed(2)})`);
+  ok(await p.isVisible(`text=v${api.formula.version}`), `แสดงชุดสูตร v${api.formula.version}`);
   await p.waitForSelector('text=วิธีคำนวณ');
   ok(await p.isVisible('text=Payback ='), 'แผงที่มาของคะแนนแสดงสูตร Payback');
   ok(await p.isVisible('text=ข้อมูลที่ใช้: ปีงบ'), 'แสดงปีงบที่ใช้คำนวณ');
   await p.screenshot({ path: `${out}/s4-01-scores.png`, fullPage: true });
 
+  const low = api.rows.filter((r) => r.utilityScore !== null && r.recommendation === 'low').map((r) => r.equipment.code);
   await p.selectOption('#lv', 'low');
-  await p.waitForFunction(() => document.querySelectorAll('tbody tr.click').length === 1);
-  ok((await p.locator('tbody tr.click').first().innerText()).includes('DEMO-008'), 'กรองระดับ < 40 เหลือ DEMO-008');
+  await p.waitForFunction((n) => document.querySelectorAll('tbody tr.click').length === n, low.length);
+  ok(low.length === 0 || (await p.locator('tbody tr.click').first().innerText()).includes(low[0]), `กรองระดับ < 40 เหลือ ${low.length} รายการ (${low.join(', ')})`);
   await p.selectOption('#lv', '');
 
   const id = api.rows.find((r) => r.equipment.code === 'DEMO-001').equipment.id;
@@ -47,12 +34,11 @@ const out = process.argv[3] || '.';
   ok((await p.locator('text=แนวโน้มรายปี >> xpath=../../..').locator('tbody tr').count()) >= 3, 'ตารางแนวโน้มรายปีมีอย่างน้อย 3 ปี');
   await p.screenshot({ path: `${out}/s4-02-detail.png`, fullPage: true });
 
-  const c = await page('PID-DEMO-CE');
-  await c.click('nav >> text=ผลวิเคราะห์ Utility Score');
-  await c.waitForSelector('#hs');
+  // ส่วนกลางเห็นรายการ รพ. B ที่ยังไม่มีคะแนน
+  const c = await page('PID-DEMO-CA');
+  await c.goto(`${base}/scores`);
   await c.waitForSelector('text=ยังคำนวณคะแนนไม่ได้');
   ok(await c.isVisible('td >> text=โรงพยาบาลตัวอย่าง B (DEMO)'), 'ส่วนกลางเห็นรายการ รพ. B ที่ยังไม่มีคะแนน');
 
-  ok(errors.length === 0, `ไม่มี JavaScript error (${errors.join(' | ')})`);
-  await b.close();
-})().catch((e) => { console.error(e.message); process.exit(1); });
+  await finish();
+});

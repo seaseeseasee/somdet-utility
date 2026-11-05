@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, type Equipment } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { CURRENT_BE_YEAR, STATUS, thDate } from '../lib/format';
+import { MoneyInput } from '../lib/MoneyInput';
 import { useOptions } from '../lib/useApi';
 
 type Form = Record<string, string>;
@@ -156,7 +157,7 @@ export function EquipmentForm() {
             </Field>
             <Field k="budgetYearBe" label="ปีงบประมาณที่ได้รับจัดสรร" error={errors.budgetYearBe}>{txt('budgetYearBe')}</Field>
             <Field k="purchasePrice" label="ราคาจัดซื้อ (บาท)" req hint="ราคาต่อเครื่อง ไม่ใช่ราคารวมทั้งสัญญา" error={errors.purchasePrice}>
-              <input id="purchasePrice" inputMode="decimal" className={`in num ${errors.purchasePrice ? 'err' : ''}`} value={form.purchasePrice} onChange={set('purchasePrice')} />
+              <MoneyInput id="purchasePrice" className={`in num ${errors.purchasePrice ? 'err' : ''}`} value={form.purchasePrice} onChange={set('purchasePrice')} />
             </Field>
             <Field k="receivedDate" label="วันที่รับเข้า" req hint={form.receivedDate ? thDate(form.receivedDate) : undefined} error={errors.receivedDate}>
               <input id="receivedDate" type="date" className={`in ${errors.receivedDate ? 'err' : ''}`} value={form.receivedDate} onChange={set('receivedDate')} />

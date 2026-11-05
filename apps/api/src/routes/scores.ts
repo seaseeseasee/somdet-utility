@@ -82,14 +82,6 @@ export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
         ? { status: 'no_data', problems: [`ซื้อหลังปีงบ ${year}`], years: [] }
         : (all.find((r) => r.equipment.id === id)?.outcome ?? scoreFromRecords(e, recs, year, f.fs));
       const ranked = outcome.status === 'scored' ? all.filter((r) => r.rank !== null) : [];
-      const history = (
-        await db.query(
-          `SELECT s.analysis_year, s.utility_score, s.recommendation, s.warning, s.rank, s.computed_at, fs.version AS formula_version
-             FROM score_result s JOIN formula_set fs ON fs.id = s.formula_set_id
-            WHERE s.equipment_id = $1 AND s.basis = 'cumulative' ORDER BY s.computed_at DESC LIMIT 20`,
-          [id],
-        )
-      ).rows;
       return {
         year,
         window: { from: year - WINDOW_YEARS + 1, to: year },
@@ -101,7 +93,6 @@ export async function scoreRoutes(app: FastifyInstance, { pool }: AppDeps) {
         rank: ranked.find((r) => r.equipment.id === id)?.rank ?? null,
         rankOf: ranked.length,
         annual: annualSeries(e, recs, f.fs),
-        history,
       };
     });
   });

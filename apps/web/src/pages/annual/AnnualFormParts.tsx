@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api, type AnnualDetail } from '../../lib/api';
 import { baht, thDate } from '../../lib/format';
+import { MoneyInput } from '../../lib/MoneyInput';
 import { ACTION, KIND, pct, type Form } from './annualForm.model';
 
 /** ดำเนินการกับข้อมูลรายปีแล้วแสดงผล (จัดการ busy/ข้อความ/โหลดใหม่ที่หน้าหลัก) */
@@ -52,7 +53,7 @@ export function MaintenanceSection({ d, editable, busy, act }: { d: AnnualDetail
           <div className="fld"><label htmlFor="mxDate">วันที่</label><input id="mxDate" type="date" className="in" min={d.period.from} max={d.period.to} value={mx.eventDate} onChange={(e) => setMx({ ...mx, eventDate: e.target.value })} /></div>
           <div className="fld"><label htmlFor="mxKind">ประเภท</label><select id="mxKind" className="in" value={mx.kind} onChange={(e) => setMx({ ...mx, kind: e.target.value })}>{Object.entries(KIND).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
           <div className="fld" style={{ flex: 1, minWidth: 180 }}><label htmlFor="mxDetail">รายละเอียด</label><input id="mxDetail" className="in" value={mx.detail} onChange={(e) => setMx({ ...mx, detail: e.target.value })} /></div>
-          <div className="fld" style={{ width: 130 }}><label htmlFor="mxCost">ค่าใช้จ่าย</label><input id="mxCost" inputMode="decimal" className="in num" value={mx.cost} onChange={(e) => setMx({ ...mx, cost: e.target.value })} /></div>
+          <div className="fld" style={{ width: 130 }}><label htmlFor="mxCost">ค่าใช้จ่าย</label><MoneyInput id="mxCost" className="in num" value={mx.cost} onChange={(e) => setMx({ ...mx, cost: e.target.value })} /></div>
           <div className="fld" style={{ width: 150 }}><label htmlFor="mxWo">เลขที่ใบงาน</label><input id="mxWo" className="in" value={mx.workOrderNo} onChange={(e) => setMx({ ...mx, workOrderNo: e.target.value })} /></div>
           <button className="btn" disabled={busy || !mx.eventDate || !mx.detail} onClick={() => void act(async () => {
             await api.post(`/api/annual/${d.record!.id}/maintenance`, { ...mx, cost: Number(mx.cost) || 0, workOrderNo: mx.workOrderNo || null });
